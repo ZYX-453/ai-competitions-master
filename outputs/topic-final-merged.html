@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>选题定稿：差评炼金炉 × VOC决策台（合并版）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: #1a1a2e; color: #e8e8f0; line-height: 1.75;
+    padding: 40px 16px 64px; font-size: 15px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 26px; font-weight: 600; margin-bottom: 6px; color: #fff; }
+  .sub { color: #9a9ab8; margin-bottom: 28px; font-size: 14px; }
+  h2 {
+    font-size: 18px; font-weight: 600; margin: 36px 0 14px;
+    padding-left: 12px; border-left: 4px solid #7f77dd; color: #cfcbee;
+  }
+  h3 { font-size: 15px; font-weight: 600; margin: 18px 0 8px; color: #b7b2e8; }
+  p { margin-bottom: 10px; }
+  .card {
+    background: #24243e; border: 1px solid #34345a; border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 14px;
+  }
+  .alert {
+    background: #2e2440; border: 1px solid #6b4ab7; border-radius: 12px;
+    padding: 16px 20px; margin: 18px 0;
+  }
+  .alert .tag {
+    display: inline-block; background: #7f77dd; color: #fff;
+    border-radius: 6px; padding: 2px 10px; font-size: 12px; margin-bottom: 8px;
+  }
+  .ok { color: #7fd7a8; font-weight: 600; }
+  .warn { color: #e8b86d; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid #34345a; padding: 9px 12px; text-align: left; vertical-align: top; }
+  th { background: #2c2c4a; color: #cfcbee; font-weight: 600; }
+  ul, ol { padding-left: 22px; margin-bottom: 10px; }
+  li { margin-bottom: 6px; }
+  .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 50%; background: #7f77dd;
+    color: #fff; font-size: 12px; margin-right: 8px; flex-shrink: 0;
+  }
+  .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 12px 0; }
+  .flow .step {
+    background: #2c2c4a; border: 1px solid #4a4a7a; border-radius: 8px;
+    padding: 8px 14px; font-size: 13px;
+  }
+  .flow .arrow { color: #7f77dd; font-weight: 700; }
+  .small { font-size: 13px; color: #9a9ab8; }
+  .divider { border: none; border-top: 1px dashed #34345a; margin: 28px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>「差评炼金炉」— VOC 归因到经营动作的闭环工具</h1>
+<p class="sub">第一届AI管理实践挑战赛 · 赛道一「市场营销与客户洞察」选题定稿（合并版）｜2026-10-30</p>
+
+<div class="alert">
+  <span class="tag">日期核验结果</span>
+  <p>你贴的材料里写「报名与作品提交 9月10日—10月18日、初赛 10/19–25 刚结束」——<span class="warn">这个日程与官网不符，已过期或来自错误信源</span>。今天 15:20 两次抓取赛事官网（aiproductivitymanagement.qwenwork.host）与高校赛区首页，<span class="ok">现行日程是：报名与作品提交 10月10日—11月10日</span>，初赛 11/11–16（选20强），复赛 11/21–22（线上路演选10强），决赛 11月底（线下）。</p>
+  <p>结论：<span class="ok">提交窗口仍然开着，距 11月10日截止还有约 11 天</span>，不用放弃。稳妥起见可以进官方咨询群问一句「11/10 提交是否照常」，但工作按 11/10 倒排即可。</p>
+</div>
+
+<h2>一、选题定位（两版合并）</h2>
+<div class="card">
+  <p><strong>一句话</strong>：把电商差评/退货原因/客服对话（CSV）导入 → 自动归因编码 → 输出四份<span class="ok">可直接执行</span>的经营动作，让商家从「回复+补偿」升级为「归因→改页面→改话术→改款」。</p>
+  <h3>痛点（保留差评炼金炉的锐度）</h3>
+  <p>中小电商商家每天收几十条差评/退货，但只会「回复+补偿」，不知道差评背后到底是尺码问题、描述不符、物流破损还是客服话术——<strong>钱花了、退货率没降</strong>。通用 VOC 分析工具只给「洞察报告」，不给动作，这是本选题的差异化切口。</p>
+  <h3>与原「VOC决策台」的合并点</h3>
+  <ul>
+    <li>保留：KANO 归类、问题优先级矩阵（提及频次×情感强度）、用户画像卡片、抽样复检机制</li>
+    <li>吸收：差评→退货率→DSR→流量权重的<strong>传导链</strong>、补偿成本 vs 挽单收益的<strong>边际决策</strong>——管理 Know-how 厚度立刻上一档</li>
+    <li>定位从「洞察平台」收敛为「<strong>归因到动作的闭环</strong>」，Demo 更聚焦、评委更好懂</li>
+  </ul>
+</div>
+
+<h2>二、工具形态与四份产物</h2>
+<div class="flow">
+  <div class="step">导入 CSV<br><span class="small">评论 / 退货原因 / 客服对话</span></div>
+  <span class="arrow">→</span>
+  <div class="step">清洗脱敏<br><span class="small">去PII、统一类目</span></div>
+  <span class="arrow">→</span>
+  <div class="step">VOC 编码归因<br><span class="small">团队自建编码本</span></div>
+  <span class="arrow">→</span>
+  <div class="step">KANO 归类<br><span class="small">必备/期望/兴奋</span></div>
+  <span class="arrow">→</span>
+  <div class="step">优先级矩阵<br><span class="small">频次×情感×退货影响</span></div>
+  <span class="arrow">→</span>
+  <div class="step">四份可执行产物</div>
+</div>
+<div class="grid2">
+  <div class="card">
+    <p><span class="num">1</span><strong>差评归因看板</strong></p>
+    <p class="small">问题类型 × SKU × 价格带 × 时间的多维下钻，一眼看到「哪款、哪类问题、在恶化还是收敛」。</p>
+  </div>
+  <div class="card">
+    <p><span class="num">2</span><strong>详情页文案改写清单</strong></p>
+    <p class="small">把「描述不符」逐条翻译成该改哪句话：尺码表补什么、材质图换哪张、卖点顺序怎么调。</p>
+  </div>
+  <div class="card">
+    <p><span class="num">3</span><strong>客服话术库</strong></p>
+    <p class="small">按归因类型分层的挽单话术 + 补偿额度建议（补偿成本 vs 挽单收益的边际决策规则内置）。</p>
+  </div>
+  <div class="card">
+    <p><span class="num">4</span><strong>改款 / 供应链建议单</strong></p>
+    <p class="small">可量化：如「A3 版型收窄 1.5cm，预计降低该 SKU 尺码类退货 X%」，直接对接改款排期。</p>
+  </div>
+</div>
+
+<h2>三、管理 Know-how（评审第一维的弹药）</h2>
+<div class="card">
+  <ul>
+    <li><strong>VOC 编码体系</strong>：自建「问题类型 → 子类 → 归因 → 动作」四级编码本，这是团队自主框架</li>
+    <li><strong>KANO 模型</strong>：区分必备/期望/兴奋需求，决定改款优先级与文案承诺尺度</li>
+    <li><strong>传导链</strong>：差评率 → 退货率 → DSR 评分 → 平台流量权重——解释「为什么差评是流量问题而不只是口碑问题」</li>
+    <li><strong>边际决策</strong>：补偿成本 vs 挽单收益，给出分层补偿额度规则（而非拍脑袋全额退）</li>
+    <li>辅助：Persona 用户画像卡片、NPS 归因、优先级评分公式（团队自定义加权）</li>
+  </ul>
+</div>
+
+<h2>四、为什么能拿分（对齐五维评审）</h2>
+<table>
+  <tr><th style="width:22%">评审维度</th><th>本选题的对应得分点</th></tr>
+  <tr><td>管理问题洞察与行业 Know-how</td><td>差评→退货→DSR→流量的传导链 + KANO + 补偿边际决策，业务理解一眼可见</td></tr>
+  <tr><td>AI 工具设计与 Vibe Coding</td><td>完整可跑的管线 + 四份可执行产物，不是一篇报告；核心产物在千问办公生成，留存 Session ID</td></tr>
+  <tr><td>学生自主增量与创新性</td><td>自建 VOC 编码本、KANO 判定规则表、优先级评分公式、补偿额度规则、抽样复检机制</td></tr>
+  <tr><td>实际效果与验证质量</td><td>见下方验证设计：一致率、耗时对比、前后对比三层证据</td></tr>
+  <tr><td>通用性与落地潜力</td><td>换类目、换平台即复用；产物直接是商家日常动作，落地零门槛</td></tr>
+</table>
+
+<h2>五、验证设计（真实或模拟均可，规则允许）</h2>
+<div class="card">
+  <ol>
+    <li><strong>归因质量</strong>：抽 100 条评论，人工标注 vs 工具归因的一致率（目标 ≥85%）</li>
+    <li><strong>效率提升</strong>：同一批数据，人工归因+写建议的耗时 vs 工具耗时（如 4 小时 → 15 分钟）</li>
+    <li><strong>改造前后对比</strong>：对同一批「描述不符」差评，产出改写清单前后，用模拟买家评审/模拟 A/B 测点击意愿与预期退货率变化</li>
+    <li><strong>（加分项）真实试点</strong>：找一家校园商家或网店，用其导出数据跑一遍，拿到真实反馈截图</li>
+  </ol>
+  <p class="small">数据来源合规提示：公开数据集（ChnSentiCorp + 开源电商评论 CSV）打底 + 真实小样本（商家后台导出/问卷自采）做验证 + 千问办公生成模拟数据补量（须注明模拟）。红线：不爬淘宝/京东/小红书评论。所有出处写进提交材料的「第三方工具及数据使用说明」。</p>
+</div>
+
+<h2>六、备选选题（主选题受阻时切换）</h2>
+<table>
+  <tr><th style="width:20%">选题</th><th>一句话</th><th style="width:22%">优势</th><th style="width:22%">风险</th></tr>
+  <tr><td>大促利润护栏</td><td>输入满减/券/直降组合 → 预测 GMV、毛利、价格弹性，给最优促销方案</td><td>价格弹性+促销叠加 Know-how 硬，应景</td><td>验证数据难拿真的</td></tr>
+  <tr><td>人群分层运营器</td><td>订单 CSV → RFM+CLV 分层 → 每层触达策略+预算分配+预期 ROI</td><td>落地性强，商家立刻能用</td><td>与官方「精准营销」案例略近</td></tr>
+  <tr><td>内容-货品匹配诊断</td><td>竞品爆款视频/笔记 → 脚本分镜、卖点排序、匹配度评分</td><td>Demo 好看，评委易感知</td><td>管理理论深度偏浅</td></tr>
+</table>
+<p class="small">注：备选2/3 与此前方案中的「人群画像运营」「内容洞察工作台」高度重合，若切换直接沿用即可，不另起炉灶。</p>
+
+<h2>七、11 天倒计时（按官网 11/10 截止）</h2>
+<div class="card">
+  <ul>
+    <li><strong>10/30–10/31（本周末）</strong>：定题+组队（3–5人）+ 完成报名；进咨询群确认提交通道</li>
+    <li><strong>11/1–11/3</strong>：千问办公里跑通管线（导入→归因→四产物），全程留存 Session ID 与阶段截图</li>
+    <li><strong>11/4–11/6</strong>：跑验证三件套（一致率/耗时/前后对比），补真实小样本</li>
+    <li><strong>11/7–11/8</strong>：写作品描述（600–1600字，七个要点全占）、录演示视频、画开发与迭代关键步骤图</li>
+    <li><strong>11/9–11/10</strong>：提交（截止前可多次提，以最后版本为准）；顺手带话题分享拿 1000 积分</li>
+  </ul>
+</div>
+
+<h2>八、提交材料清单</h2>
+<div class="card">
+  <ul>
+    <li>☑ 作品基本信息：名称 / 所属方向（市场营销与客户洞察）/ 作品形态</li>
+    <li>☑ 开发与外部资源说明：千问办公关键任务 Session ID + 第三方工具及数据使用说明（含全部数据出处）</li>
+    <li>☑ 作品描述 600–1600 字：为什么选这个问题 / 想解决什么 / 管理 Know-how / 如何解决 / 千问办公的作用 / 团队自主设计 / 实测效果</li>
+    <li>☑ 附件：演示视频、开发与迭代关键步骤图、效果验证材料、补充说明</li>
+    <li>☑ 合规自查：核心产物在千问办公生成 · 原创/授权 · 数据合法脱敏 · 保留对话与截图备查</li>
+  </ul>
+</div>
+
+<p class="small" style="margin-top:28px">参考：赛事官网 aiproductivitymanagement.qwenwork.host ｜《赛事细则》(钉钉文档，需登录，组队后通读) ｜官方案例库 usecase.qwenwork.host ｜课程 learn.qwenwork.host/courses</p>
+
+</div>
+</body>
+</html>

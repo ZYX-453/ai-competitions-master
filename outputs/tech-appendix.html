@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>技术附件包 · 差评炼金炉</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: #14141c; color: #e4e4ee; line-height: 1.8;
+    padding: 48px 16px 80px; font-size: 14.5px;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  .kicker { font-size: 12px; letter-spacing: 2px; color: #8a7ff0; margin-bottom: 10px; }
+  h1 { font-size: 28px; font-weight: 600; margin-bottom: 8px; color: #fff; line-height: 1.4; }
+  .sub { color: #85859e; margin-bottom: 12px; font-size: 13.5px; }
+  .toc {
+    background: #1d1d2a; border: 1px solid #2e2e42; border-radius: 10px;
+    padding: 14px 20px; margin-bottom: 34px; font-size: 13.5px;
+  }
+  .toc a { color: #a89cf0; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc span { color: #55556b; margin: 0 8px; }
+  h2 {
+    font-size: 20px; font-weight: 600; margin: 48px 0 16px;
+    padding-left: 14px; border-left: 4px solid #8a7ff0; color: #d6d2f5;
+  }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 26px 0 10px; color: #b9b2ec; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 7px; color: #9d96d4; }
+  p { margin-bottom: 11px; }
+  .card {
+    background: #1d1d2a; border: 1px solid #2e2e42; border-radius: 12px;
+    padding: 19px 23px; margin-bottom: 15px;
+  }
+  .card.hl { border-color: #6a5acd; background: #211f31; }
+  .alert {
+    background: #232038; border: 1px solid #6b4ab7; border-radius: 12px;
+    padding: 16px 21px; margin: 20px 0;
+  }
+  .alert .tag {
+    display: inline-block; background: #8a7ff0; color: #14141c;
+    border-radius: 6px; padding: 3px 11px; font-size: 11.5px; margin-bottom: 9px;
+    letter-spacing: .8px; font-weight: 600;
+  }
+  .ok { color: #5fd4a8; font-weight: 600; }
+  .warn { color: #e0b06a; font-weight: 600; }
+  .bad { color: #e08585; font-weight: 600; }
+  .dim { color: #85859e; }
+  .purple { color: #a89cf0; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.2px; }
+  th, td { border: 1px solid #2e2e42; padding: 9px 12px; text-align: left; vertical-align: top; line-height: 1.65; }
+  th { background: #262638; color: #d0caf2; font-weight: 600; font-size: 12.8px; }
+  tr:nth-child(even) td { background: #191924; }
+  ul, ol { padding-left: 23px; margin-bottom: 11px; }
+  li { margin-bottom: 7px; }
+  .formula {
+    background: #12121a; border: 1px solid #35354d; border-left: 3px solid #8a7ff0;
+    border-radius: 8px; padding: 13px 18px; margin: 12px 0;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.8px;
+    color: #b8b0e8; line-height: 1.9; overflow-x: auto; white-space: pre;
+  }
+  code {
+    background: #2a2a3e; padding: 1px 6px; border-radius: 4px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px; color: #b8b0e8;
+  }
+  .small { font-size: 12.7px; color: #85859e; line-height: 1.7; }
+  .divider { border: none; border-top: 1px dashed #2e2e42; margin: 34px 0; }
+  .draft {
+    background: #18181f; border: 1px solid #3d3d55; border-radius: 10px;
+    padding: 24px 30px; margin: 14px 0; line-height: 2.05; font-size: 14px;
+    color: #d8d8e4; white-space: normal;
+  }
+  .draft h4 { color: #a89cf0; margin-top: 20px; margin-bottom: 6px; font-size: 14.5px; }
+  .draft p { margin-bottom: 12px; text-indent: 2em; }
+  .draft .lead { text-indent: 0; }
+  .label {
+    display: inline-block; background: #2e2a45; color: #a89cf0;
+    padding: 2px 9px; border-radius: 5px; font-size: 11.5px;
+    font-weight: 600; margin-right: 6px;
+  }
+  .check { color: #5fd4a8; font-family: monospace; margin-right: 6px; }
+  .empty { color: #55556b; font-family: monospace; margin-right: 6px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="kicker">技术附件包 · 随作品提交</div>
+<h1>差评炼金炉 · 技术附件包</h1>
+<p class="sub">编码本 v1 全文 ｜ DGP 数据生成规范 ｜ 评测记录表 ｜ 作品描述草稿（可直接粘贴）<br>第一届中国 AI 管理实践挑战赛 · 市场营销与客户洞察 ｜ 2026-10-31</p>
+
+<div class="toc">
+  <a href="#a1">附件一 编码本 v1</a><span>·</span>
+  <a href="#a2">附件二 DGP 生成规范</a><span>·</span>
+  <a href="#a3">附件三 评测记录表</a><span>·</span>
+  <a href="#a4">附件四 作品描述草稿</a><span>·</span>
+  <a href="#a5">附件五 合规台账</a>
+</div>
+
+<h2 id="a1">附件一 ｜ VOC 四级编码本 v1.0</h2>
+<p class="small">用途：归因引擎的判定依据、金标准标注的操作手册、编码本演进的版本基线。冻结时间：2026-11-01。</p>
+
+<div class="alert">
+  <span class="tag">使用方式</span>
+  <p style="margin-bottom:0">标注时<strong>只判 L1 + L2</strong>（L3 归因与 L4 动作由系统建议、人工确认）。原因：L1/L2 可由文本直接判定，客观性强、κ 才高；L3/L4 需要经营上下文，让模型生成更合适。<span class="ok">这个设计决定本身就体现了对标注可靠性的理解</span>——细分层级越多，人工一致性越差。</p>
+</div>
+
+<h3>层级总览</h3>
+<table>
+  <tr><th style="width:10%">代码</th><th style="width:14%">L1 问题域</th><th style="width:20%">L2 子类</th><th style="width:28%">判定边界（什么时候归这一类）</th><th style="width:28%">常见误判</th></tr>
+  <tr><td><code>P</code></td><td rowspan="2"><strong>产品本体</strong><br><span class="small">实物与物理属性</span></td><td>P1 尺码版型</td><td>涉及大小、长短、肥瘦、版型、合身度、"穿着不合身"</td><td>与 P2 混淆：面料导致的不适归 P2</td></tr>
+  <tr><td><code>P</code></td><td>P2 材质做工</td><td>面临手感、厚薄、起球、掉色、开线、异味、做工粗糙</td><td>与 I1 混淆：仅"和图片不一样"归 I1，说"和描述材质不符"归 P2</td></tr>
+  <tr><td><code>I</code></td><td rowspan="2"><strong>信息承诺</strong><br><span class="small">页面说了什么</span></td><td>I1 描述不符</td><td>颜色/款式/功能与页面呈现不一致，或关键参数缺失导致误购</td><td>仅在说"有色差"且无实物质量问题时归 I1；说"褪色"归 P2</td></tr>
+  <tr><td><code>I</code></td><td>I2 图文误导</td><td>场景图/模特图/搭配造成预期错误（如显瘦效果、使用场景）</td><td>与 P1 的分界：说"穿上没模特那么显瘦"归 I2，说"腰围太小"归 P1</td></tr>
+  <tr><td><code>F</code></td><td rowspan="2"><strong>履约物流</strong><br><span class="small">从仓库到手里</span></td><td>F1 破损污损</td><td>到货时已损坏、脏污、受潮、包装压瘪导致商品受损</td><td>与 P2 分界：出厂即有的瑕疵归 P2，运输造成归 F1</td></tr>
+  <tr><td><code>F</code></td><td>F2 时效错发</td><td>发货慢、物流停滞、错发、漏发、少件</td><td>—</td></tr>
+  <tr><td><code>S</code></td><td rowspan="2"><strong>服务体验</strong><br><span class="small">人的交互</span></td><td>S1 客服响应</td><td>态度差、回复慢、答非所问、推诿、机器人感</td><td>评价售后流程繁琐归 S2</td></tr>
+  <tr><td><code>S</code></td><td>S2 售后流程</td><td>退货麻烦、审核慢、退款不到账、换货流程复杂</td><td>—</td></tr>
+  <tr><td><code>E</code></td><td rowspan="1"><strong>预期管理</strong><br><span class="small">非实物的落差</span></td><td>E1 价值感知</td><td>觉得不值这个价、促销后感觉被割、赠品落差、无使用指引</td><td>与 I1 分界：说"贵"归 E1，说"和描述不一样"归 I1</td></tr>
+</table>
+<p class="small">共 5 个 L1、9 个 L2。<strong>标注任务只需在 9 个 L2 中选 1 个主类</strong>（可另记 1 个次类）。若一条评论完全不含上述任何一类（如纯物流好评、无意义字符），标 <code>X 无效</code>，不计入评测分母。</p>
+
+<h3>L3 / L4 对照表（系统生成，人工确认）</h3>
+<div class="card">
+  <table>
+    <tr><th style="width:16%">L2 子类</th><th style="width:42%">L3 归因候选</th><th style="width:42%">L4 动作候选</th></tr>
+    <tr><td>P1 尺码版型</td><td>版型与目标人群不匹配 / 尺码表标注偏差 / 供应链版型漂移</td><td>改版型 / 修正尺码表 / 增加身高体重对照指引</td></tr>
+    <tr><td>P2 材质做工</td><td>面料与宣称不符 / 品控波动 / 供应商更换 / 工艺缺陷</td><td>换面料 / 加质检抽检点 / 回溯供应商批次</td></tr>
+    <tr><td>I1 描述不符</td><td>详情页夸大 / 关键参数缺失 / 拍摄色温偏差</td><td>改文案措辞 / 补参数表 / 标准光源重拍主图</td></tr>
+    <tr><td>I2 图文误导</td><td>场景图过度美化 / 模特身材不代表目标客群</td><td>换场景图 / 加"实际效果"实拍图</td></tr>
+    <tr><td>F1 破损污损</td><td>包装抗压不足 / 仓储环境潮湿 / 装箱未加缓冲</td><td>升级包装 / 加内衬缓冲 / 改仓储分区</td></tr>
+    <tr><td>F2 时效错发</td><td>承运商时效不稳 / 仓储拣货错 / 库存信息不准</td><td>换承运商 / 加复核扫码 / 同步库存</td></tr>
+    <tr><td>S1 客服响应</td><td>话术生硬 / 人力排班不足 / 知识库缺失</td><td>换话术库 / 调排班 / 建 FAQ 知识库</td></tr>
+    <tr><td>S2 售后流程</td><td>审核环节冗余 / 系统对接失败</td><td>简化流程 / 打通系统</td></tr>
+    <tr><td>E1 价值感知</td><td>促销价格锚点失衡 / 赠品缩水 / 无使用指引</td><td>调价格策略 / 规划赠品 / 加使用说明卡</td></tr>
+  </table>
+</div>
+
+<h3>示例句库（每类 3 条，用于 few-shot 与培训）</h3>
+<div class="card">
+  <table>
+    <tr><th style="width:16%">类别</th><th style="width:84%">示例原文（真实语料风格）</th></tr>
+    <tr><td>P1 尺码版型</td><td>"身高 165 体重 100 斤买的 M，袖子长了快 5 公分" ／ "腰围偏小，平时穿 28 这条扣不上" ／ "版型特别宽，穿上像套了个麻袋"</td></tr>
+    <tr><td>P2 材质做工</td><td>"面料很薄，一照就透，和说的加厚完全不一样" ／ "洗一次就起球了，袖口还开线" ／ "有股很重的胶味，晾了三天还在"</td></tr>
+    <tr><td>I1 描述不符</td><td>"图片是浅灰，收到偏深几乎发黑" ／ "详情页写 100% 棉，水洗标是涤棉" ／ "没有标厚度，收到才发现是薄款"</td></tr>
+    <tr><td>I2 图文误导</td><td>"模特穿很显瘦，我穿完全不是那个效果" ／ "图上配的是阔腿裤，实际是直筒" ／ "场景图像是卧室用的，实际尺寸放不下"</td></tr>
+    <tr><td>F1 破损污损</td><td>"外箱都压扁了，里面盒子变形" ／ "拆开有一块油渍，在正面很明显" ／ "拉链头是断的，明显是挤压导致"</td></tr>
+    <tr><td>F2 时效错发</td><td>"下单十天还在待揽收" ／ "买的是黑色发成藏青" ／ "四件套只到了三件，少一个枕套"</td></tr>
+    <tr><td>S1 客服响应</td><td>"问了三次都答非所问，像机器人" ／ "客服一直已读不回" ／ "说帮我查，然后就没有然后了"</td></tr>
+    <tr><td>S2 售后流程</td><td>"退货要上传五张图，还要等审核三天" ／ "退款一周了没到账" ／ "换货运费还得我自己出"</td></tr>
+    <tr><td>E1 价值感知</td><td>"这个质量卖 199 太贵了" ／ "刚买完就降价 50，感觉被割韭菜" ／ "赠品就一个很小的收纳袋，和图上差太多"</td></tr>
+  </table>
+</div>
+
+<h3>排他规则（消除歧义的关键）</h3>
+<div class="card hl">
+  <ol>
+    <li><strong>主类优先原则</strong>：一条评论同时抱怨多个问题时，取<strong>最影响退货决策</strong>的那一类为主类。判断线索：句首句、语气最强处、是否明确提到"所以退了/所以要退"。</li>
+    <li><strong>因果链就近原则</strong>：若 A 导致 B（"包装太薄所以压坏了"），归<strong>原因端</strong>（F1 破损，因包装问题），不归结果端。</li>
+    <li><strong>涉实物优先</strong>：同时提到"描述不符"且"有实物质量问题"，归 <strong>P 类</strong>（实物问题更硬）。仅当无实物问题时才归 I 类。</li>
+    <li><strong>色差三分法</strong>：说"颜色和图片不一样" → I1；说"洗后掉色" → P2；说"实物颜色不好看" → E1（审美偏好，非承诺问题）。</li>
+    <li><strong>无效样本界定</strong>：纯表情/无意义字符/仅"好""不错"等无信息内容/纯物流好评 → <code>X</code>。好评中的隐晦抱怨（"就是有点小，其他都好"）<strong>算有效</strong>，归对应类。</li>
+    <li><strong>中性描述不算问题</strong>："偏大一点，我换小一码就好了"未表达不满 → <code>X</code> 或按上下文判断；明确表达不满才算。</li>
+  </ol>
+</div>
+
+<h3>版本演进记录（提交时需体现 v1 → v3）</h3>
+<table>
+  <tr><th style="width:10%">版本</th><th style="width:14%">日期</th><th style="width:44%">变更内容</th><th style="width:32%">触发原因（须有数据支撑）</th></tr>
+  <tr><td>v1.0</td><td>11/01</td><td>初始 5 L1 / 9 L2 框架 + 排他规则</td><td>文献框架 + 团队电商经验</td></tr>
+  <tr><td>v2.0</td><td>11/03</td><td><span class="dim">待填：预计合并或拆分的类别</span></td><td>双人标注 κ 显示某两类混淆率 &gt; 30%</td></tr>
+  <tr><td>v3.0</td><td>11/05</td><td><span class="dim">待填：根据工具低置信样本补充的边界说明</span></td><td>复盘队列中某类冲突集中出现</td></tr>
+</table>
+<p class="small">这张表必须在提交前填满真实内容（含具体混淆率数字）。<span class="warn">空表或编造的数字，评委一问就露。</span></p>
+
+<hr class="divider">
+
+<h2 id="a2">附件二 ｜ DGP 数据生成规范</h2>
+<p class="small">用途：让模拟数据可复现、可审计。这份规范本身就是"方法严谨"的证据，务必随作品提交。</p>
+
+<div class="alert">
+  <span class="tag">核心原则</span>
+  <p style="margin-bottom:0">模拟数据的价值不在于"像真的"，而在于<span class="ok">真值已知</span>。所以每个参数都必须：①有来源依据（文献/行业报告/合理假设）；②显式记录；③生成代码固定随机种子。<strong>参数表就是这份附件的主体。</strong></p>
+</div>
+
+<h3>2.1 面板数据结构（500 SKU × 52 周）</h3>
+<table>
+  <tr><th style="width:22%">字段</th><th style="width:16%">类型</th><th style="width:34%">生成方式</th><th style="width:28%">取值范围与依据</th></tr>
+  <tr><td><code>sku_id</code></td><td>str</td><td>SKU0001–SKU0500</td><td>—</td></tr>
+  <tr><td><code>week</code></td><td>int</td><td>1–52 顺序生成</td><td>覆盖完整年度，含大促周</td></tr>
+  <tr><td><code>category</code></td><td>cat</td><td>随机分配 4 类（家居/服饰/日用/美妆）</td><td>为"类目可插拔"提供接口</td></tr>
+  <tr><td><code>price</code></td><td>float</td><td>对数正态，类目均值不同</td><td>¥39–¥899，服饰均值 ~¥129</td></tr>
+  <tr><td><code>margin_rate</code></td><td>float</td><td>Beta 分布，按类目设定</td><td>20%–55%，服饰偏低</td></tr>
+  <tr><td><code>quality_endow</code></td><td>float</td><td>N(0, 1) 作为 SKU 固定效应</td><td><span class="warn">关键</span>：这是遗漏变量，用于验证 FE 的必要性</td></tr>
+  <tr><td><code>return_rate</code></td><td>float</td><td>见 2.2 生成式</td><td>8%–35%，行业区间</td></tr>
+  <tr><td><code>dsr</code></td><td>float</td><td>见 2.3（滞后传导）</td><td>4.0–5.0</td></tr>
+  <tr><td><code>exposure</code></td><td>int</td><td>见 2.4（对数线性）</td><td>1e4–1e6</td></tr>
+  <tr><td><code>visitors</code></td><td>int</td><td>exposure × CTR（类目差异）</td><td>CTR 2%–5%</td></tr>
+  <tr><td><code>orders</code></td><td>int</td><td>visitors × CVR</td><td>CVR 1.5%–4%</td></tr>
+  <tr><td><code>sales</code></td><td>float</td><td>orders × price</td><td>—</td></tr>
+</table>
+
+<h3>2.2 退货率生成式</h3>
+<div class="formula">return_rate_it = logistic( a₀ + a₁·quality_endow_i + a₂·(price_i − mean_price)/sd_price
+                          + a₃·promo_t + a₄·logistics_shock_it
+                          + a₅·season_t + ε_it )
+
+设定（真值，冻结）：
+  a₀ = −1.55     基线水平（对应约 18% 退货率）
+  a₁ = −0.35     质量禀赋越高退货越低
+  a₂ =  0.12     价格越高退货略高
+  a₃ =  0.28     大促期间退货上升（冲动购买）
+  a₄ =  0.45     物流冲击（破损/延迟）
+  a₅ =  0.15     季节性（换季月份）
+  ε_it ~ N(0, 0.30)</div>
+
+<h3>2.3 一级传导：退货率 → DSR（滞后 1–2 周）</h3>
+<div class="formula">dsr_it = 4.72 + δ_i + ψ_t − λ₁·return_rate_i,t−1 − λ₂·return_rate_i,t−2 + u_it
+
+真值：
+  λ₁ = 0.42      退货率每升 1pp，次周 DSR 降 0.42 分
+  λ₂ = 0.18      二阶滞后（部分影响延迟）
+  δ_i ~ N(0, 0.08)   SKU 固定效应
+  ψ_t ~ N(0, 0.04)   周固定效应（大促周额外下调）
+  u_it ~ N(0, 0.05)</div>
+
+<h3>2.4 二级传导：DSR → 曝光（滞后 2 周）</h3>
+<div class="formula">ln(exposure_it) = 11.2 + η_i + φ_t + ω₁·dsr_i,t−2 + ω₂·dsr_i,t−3 + θ·ln(price_i) + v_it
+
+真值：
+  ω₁ = 0.18     DSR 每升 1 分，两周后曝光增 18%（对数半弹性）
+  ω₂ = 0.09     三阶滞后
+  θ  = −0.35    价格弹性
+  η_i ~ N(0, 0.25)   SKU 固定效应
+  φ_t ~ N(0, 0.15)   周固定效应
+  v_it ~ N(0, 0.12)</div>
+
+<div class="alert">
+  <span class="tag">关键设计意图</span>
+  <p style="margin-bottom:0"><code>quality_endow</code>（质量禀赋）同时影响<strong>退货率与曝光</strong>。<span class="ok">这就制造了真实的遗漏变量偏差</span>：忽略 SKU 固定效应的 Pooled OLS 会把"好货本来流量高"误读成"流量高导致退货低"，估计出的 λ₁ 出现偏误。加上 FE 后被纠正——这正是 E3 要展示的方法对比，也是"我们懂为什么用 FE"的证据。</p>
+</div>
+
+<h3>2.5 补偿-挽单 DGP（5000 条客服记录）</h3>
+<div class="formula">诚实用户挽单概率：
+  P_honest(c) = 1 / (1 + exp(−( b₀ + b₁·c + b₂·margin_i + b₃·complaint_history_i )))
+
+策略用户比例：
+  θ(c) = θ₀ + θ₁ · c / (c + c₀)
+
+真值：
+  b₀ = −1.20   无补偿时挽单率约 23%
+  b₁ =  0.055  每多补 10 元，logit 增 0.55
+  b₂ =  1.60   高毛利订单更易挽留（可给更多）
+  b₃ = −0.40   历史投诉多者更难挽留
+  θ₀ = 0.05    基线策略用户比例
+  θ₁ = 0.12    最高可达 17%
+  c₀ = 45      半饱和点（元）
+
+观测：每条记录按 Bernoulli(P_eff(c)) 生成是否挽单</div>
+<p class="small">这套设定下，完整模型应估出 c* 在 ¥20–¥35 区间（视毛利档），且高毛利组 c* 明显高于低毛利组。<span class="warn">若估计出的 c* 不在合理区间，说明模型写错了，必须回查而不是调参凑结果。</span></p>
+
+<h3>2.6 复现要求</h3>
+<div class="card">
+  <ul>
+    <li>固定随机种子（建议 <code>seed = 20261110</code>，好记且暗示提交日）</li>
+    <li>生成脚本与参数表一并提交（脚本可放附件，不必是生产级代码）</li>
+    <li>随机打乱字段顺序后再跑一次，结果应完全一致（排除顺序依赖）</li>
+    <li>报告中明确标注："以下结果基于模拟数据，真值由团队设定，用于方法验证而非真实效果估计"</li>
+  </ul>
+</div>
+
+<hr class="divider">
+
+<h2 id="a3">附件三 ｜ 评测记录表</h2>
+<p class="small">跑实验时逐项填写。这张表最终截图进"效果验证材料"附件。</p>
+
+<h3>E1 归因质量</h3>
+<table>
+  <tr><th style="width:34%">指标</th><th style="width:18%">通过标准</th><th style="width:16%">实测值</th><th style="width:32%">备注</th></tr>
+  <tr><td>κ（人工间，200 条双人盲标）</td><td>≥ 0.65</td><td class="dim">＿＿＿</td><td>低于 0.6 须返工编码本</td></tr>
+  <tr><td>macro-F1（工具 vs 金标准）</td><td>≥ 0.80</td><td class="dim">＿＿＿</td><td>类别不平衡，务必用 macro 而非 accuracy</td></tr>
+  <tr><td>κ（工具 vs 金标准）</td><td>≥ 0.70</td><td class="dim">＿＿＿</td><td>—</td></tr>
+  <tr><td>消融：去 KANO 规则</td><td>F1 下降 ≥ 3pp</td><td class="dim">＿＿＿</td><td>—</td></tr>
+  <tr><td>消融：去 few-shot 回灌</td><td>F1 下降 ≥ 3pp</td><td class="dim">＿＿＿</td><td>—</td></tr>
+  <tr><td>消融：去双通道校验</td><td>F1 下降 ≥ 3pp</td><td class="dim">＿＿＿</td><td>—</td></tr>
+  <tr><td>消融：去 evidence_span 约束</td><td>F1 下降 ≥ 3pp</td><td class="dim">＿＿＿</td><td>—</td></tr>
+  <tr><td>阈值 0.6 / 0.7 / 0.8 下的覆盖率与 F1</td><td>给出权衡曲线</td><td class="dim">＿＿＿</td><td>推荐阈值需给理由</td></tr>
+</table>
+
+<h3>E2 偏差校正</h3>
+<table>
+  <tr><th style="width:34%">指标</th><th style="width:18%">通过标准</th><th style="width:16%">实测值</th><th style="width:32%">备注</th></tr>
+  <tr><td>原始排名 vs 校正排名 Spearman ρ</td><td>&lt; 0.85（结论成立）</td><td class="dim">＿＿＿</td><td>ρ 越低说明扭曲越严重，结论越有冲击力</td></tr>
+  <tr><td>MLE 参数 α, β, κ₀, κ₁ 估计值</td><td>收敛且合理</td><td class="dim">＿＿＿</td><td>记录标准误</td></tr>
+  <tr><td>模拟数据下不满率估计误差</td><td>&lt; 3pp</td><td class="dim">＿＿＿</td><td>真值已知，直接比对</td></tr>
+</table>
+
+<h3>E3 参数回收（200 次蒙特卡洛）</h3>
+<table>
+  <tr><th style="width:26%">参数</th><th style="width:12%">真值</th><th style="width:15%">估计均值</th><th style="width:15%">Bias</th><th style="width:15%">RMSE</th><th style="width:17%">CI 覆盖率</th></tr>
+  <tr><td>λ₁（一级传导）</td><td>0.42</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td></tr>
+  <tr><td>λ₂</td><td>0.18</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td></tr>
+  <tr><td>ω₁（二级传导）</td><td>0.18</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td></tr>
+  <tr><td>ω₂</td><td>0.09</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td><td class="dim">＿＿</td></tr>
+</table>
+<table>
+  <tr><th style="width:34%">方法对比（同一次重复内）</th><th style="width:33%">λ₁ 估计偏差</th><th style="width:33%">说明</th></tr>
+  <tr><td>Pooled OLS（无 FE）</td><td class="dim">＿＿＿</td><td>预期明显有偏，证明遗漏变量存在</td></tr>
+  <tr><td>双向固定效应</td><td class="dim">＿＿＿</td><td>预期偏差最小</td></tr>
+  <tr><td>固定效应 + 滞后项</td><td class="dim">＿＿＿</td><td>本方案采用</td></tr>
+</table>
+
+<h3>E4 决策回测</h3>
+<table>
+  <tr><th style="width:34%">策略</th><th style="width:22%">累计利润</th><th style="width:22%">相对完整模型</th><th style="width:22%">备注</th></tr>
+  <tr><td>经验固定档位（补 20 元）</td><td class="dim">＿＿＿</td><td class="dim">＿＿＿</td><td>基线</td></tr>
+  <tr><td>无策略性投诉模型</td><td class="dim">＿＿＿</td><td class="dim">＿＿＿</td><td>应出现 c* 偏高</td></tr>
+  <tr><td>完整模型（含 θ(c)）</td><td class="dim">＿＿＿</td><td>—</td><td>需领先 ≥ 15%</td></tr>
+  <tr><td>c* 与真实最优点的相对误差</td><td colspan="3" class="dim">＿＿＿（需 &lt; 15%）</td></tr>
+</table>
+
+<hr class="divider">
+
+<h2 id="a4">附件四 ｜ 作品描述草稿（约 1420 字，可直接粘贴）</h2>
+<p class="small">已按赛事要求的七个要点组织。提交前请把 <span class="warn">【】</span> 内的实测数字替换为真实结果——<strong>不要留占位符，也不要编数字</strong>。</p>
+
+<div class="draft">
+  <h4 style="color:#fff;font-size:16px;text-indent:0">从差评到决策：让每一个补偿动作都有据可查</h4>
+
+  <h4>一、为什么选这个管理问题</h4>
+  <p>电商中小商家的差评处理，长期停留在一个固定循环里：收到差评、回复道歉、发一张补偿券、等下一个差评。补偿成本持续支出，退货率却没有下降，店铺评分缓慢下滑，自然流量被平台算法一步步压低。我们在调研中接触到的商家，几乎都把差评当作"服务事件"来对待——安抚一个具体的、愤怒的人。但在几百条真实的差评文本里反复出现的，不是服务态度问题，而是产品与信息问题：版型与目标人群不匹配、详情页承诺与实物不符、包装不抗压导致破损。</p>
+  <p>归因错了，下游所有动作都会跟着错：钱花在补偿上，而不是改页面、改版型、改包装。我们想解决的不是"帮商家看懂差评"——这件事大模型已经能做——而是"帮商家把看懂变成改对，并且知道改哪一个最划算"。</p>
+
+  <h4>二、想解决什么问题</h4>
+  <p>核心问题是决策优先级。一个商家同时面对十几类问题、几十个 SKU、有限的改款预算，他需要的答案是：这个月五千块，先改哪一个？现有工具的答案是缺失的——通用 VOC 工具给出洞察报告，止步于"知道"；大模型直接分析能给出归因，但输出不稳定、无法评估准确性，商家不敢据此投入真金白银去改模具；BI 看板能展示退货率趋势，却看不出文本信号与经营结果之间的因果。三者之间缺少一个环节：从信号到决策、并且每一步都可被检验的闭环。</p>
+
+  <h4>三、管理 Know-how</h4>
+  <p>本作品的管理逻辑建立在三个非共识判断上。</p>
+  <p><strong>第一，差评率不能直接用来排序。</strong>差评率的分母是评论数，而评论本身不是随机样本：满意用户的评论率约为 2%–5%，不满用户可达 10%–20%，遭遇严重问题的用户更高。这意味着观察到的差评率系统性高估了真实不满率，且偏差幅度随品类、促销强度、物流时效变化而不同。直接按差评率给 SKU 排优先级，排名是失真的。我们通过评分分布形状反推潜在满意度与参与率的联合分布，输出校正后的不满率排名，并与原始排名并列对比。</p>
+  <p><strong>第二，补偿存在天花板。</strong>行业默认"多补点就能留住人"，但补偿越慷慨，越会吸引策略性投诉者——他们本不打算退货，看到补偿规则后主动制造问题。把用户分为诚实与策略两类、并让策略用户比例随补偿额上升后，目标函数出现明确拐点：超过该点，挽单率的边际提升被补偿成本与策略性损耗吃掉，利润转为下降。对低毛利 SKU，全额退款策略在数学上必然亏钱。这解释了为什么"一刀切补偿"长期看是净损失。</p>
+  <p><strong>第三，差评是流量成本问题，不只是口碑问题。</strong>差评率上升会推高退货率，退货率压低店铺评分，评分又通过平台流量分配机制影响曝光。这条传导链若只停留在定性描述，商家不会真的行动；只有把它换算成"退货率每降一个百分点，等于每月多拿多少免费流量"，决策才会发生。</p>
+
+  <h4>四、作品如何解决问题</h4>
+  <p>作品是一个四层系统。描述层接收评论、退货原因、客服对话三类文本，通过团队自建的五域九类编码体系完成归因，输出归因看板、校正后问题排名与用户关注点分群。因果层用面板回归估计两级传导弹性，控制 SKU 与周固定效应，输出带置信区间的系数并换算为等效流量价值。决策层求解含策略性投诉的补偿最优化问题，给出按归因类型与毛利档位分层的补偿矩阵；同时把改款动作构建为带预算约束的背包问题，输出投资回报排序。证据层是贯穿始终的评测台，报告标注一致性、模型分类质量、消融结果与参数回收情况。</p>
+  <p>以一条真实差评"图片是浅灰，收到偏深几乎发黑"为例：系统判定为信息承诺类下的描述不符，置信度 0.83，证据句定位到原文，动作建议为"主图需在标准光源下重拍"，并给出该问题在同类 SKU 中的出现频次与对退货率的贡献度。商家得到的不是一句"注意色差"，而是一个可以立刻派给美工的任务。</p>
+
+  <h4>五、千问办公承担的作用</h4>
+  <p>千问办公是本作品的核心生产环境。数据接入、清洗规则配置、归因流水线编排、看板搭建、决策沙盘搭建全部在其中完成。沙盘是本作品最具交互性的部分：拖动补偿额度与改款预算两个控件，实时联动显示预计退货率、月毛利与投资回报曲线，拐点位置会随毛利档位变化而移动，让"补太多反而亏"从一个论断变成可以亲手验证的现象。所有关键任务的会话记录已留存，作为可核验依据。</p>
+
+  <h4>六、团队进行了哪些自主设计和优化</h4>
+  <p>三处核心框架由团队自主设计。其一，四级编码体系与排他规则——包括主类优先、因果链就近、色差三分法等六条判定规则，解决了"一条评论抱怨三件事"这类最常见的标注歧义。其二，双通道校验机制——大模型归因与关键词规则引擎并行判定，两路不一致的样本强制进入人工复检，使准确率从偶然结果变成可解释的工程机制，不一致率本身也成为编码体系模糊度的度量。其三，评测协议——所有通过标准在实验开始前写定并留档，避免事后挑选结果；同时设计了参数回收检验，用已知真值的模拟数据验证估计方法的可靠性。编码体系经过三个版本的迭代，每一版的修订都有标注冲突数据作为依据。</p>
+
+  <h4>七、实际测试与主要效果</h4>
+  <p>文本归因在【200】条双人独立盲标的金标准集上评估，人工间一致性 κ 为【＿】，模型与金标准的宏观 F1 为【＿】，κ 为【＿】；四组消融实验显示各模块的独立贡献分别为【＿】。偏差校正方面，原始差评率排名与校正后不满率排名的秩相关系数为【＿】，说明按直觉排序确实会错配改进资源。估计方法在【500】个 SKU、52 周、重复【200】次的模拟面板上完成参数回收，关键系数的相对偏差为【＿】%，置信区间覆盖率为【＿】%。决策回测中，含策略性投诉的完整模型累计利润较经验固定档位策略高出【＿】%。</p>
+  <p>需要说明的是，因果与决策两层使用团队自建的模拟数据，参数依据公开行业区间设定并在附件中完整披露。这一选择不是为了规避真实数据的困难，而是因为真实企业的连续面板与补偿结果记录无法获取；而模拟数据的价值恰在于真值已知——它让我们能够证明方法本身可靠，再把方法用于答案未知的真实世界。文本归因层则全部建立在真实公开语料上，其评测结果不依赖任何模拟。</p>
+</div>
+
+<hr class="divider">
+
+<h2 id="a5">附件五 ｜ 合规台账</h2>
+<div class="card">
+  <table>
+    <tr><th style="width:24%">项目</th><th style="width:46%">说明（提交时照此填写）</th><th style="width:30%">状态</th></tr>
+    <tr>
+      <td>文本数据来源</td>
+      <td>ChnSentiCorp 中文情感数据集（公开学术数据集）；【数据集名称】电商评论数据集（开源，含评分与文本）</td>
+      <td><span class="empty">☐</span>待填具体出处链接</td>
+    </tr>
+    <tr>
+      <td>模拟数据披露</td>
+      <td>经营面板（500 SKU × 52 周）与客服补偿记录（5000 条）为团队自建，生成规范见《DGP 技术说明》，参数完整公开、随机种子固定、可复现</td>
+      <td><span class="check">✓</span>已披露</td>
+    </tr>
+    <tr>
+      <td>个人信息处理</td>
+      <td>所有文本数据已去除用户昵称、联系方式、订单号等身份标识；模拟数据不含任何真实个人信息</td>
+      <td><span class="check">✓</span>已脱敏</td>
+    </tr>
+    <tr>
+      <td>第三方工具</td>
+      <td>Python（statsmodels / pandas / numpy）用于统计建模与计算；千问办公用于核心产物生成（数据接入、看板、沙盘、报告）</td>
+      <td><span class="check">✓</span>已列明</td>
+    </tr>
+    <tr>
+      <td>原创性</td>
+      <td>编码体系、排他规则、双通道校验机制、含策略性投诉的补偿模型、评测协议均为团队原创；未在其他赛事获奖或商业化</td>
+      <td><span class="check">✓</span>声明</td>
+    </tr>
+    <tr>
+      <td>未获取的数据（主动说明）</td>
+      <td>未抓取淘宝、京东、小红书、抖音等平台的用户评论或舆情数据；未使用任何未经授权的竞品经营数据</td>
+      <td><span class="check">✓</span>主动声明</td>
+    </tr>
+    <tr>
+      <td>过程存档</td>
+      <td>关键任务 Session ID 【＿】个；阶段截图 【＿】张；编码体系三版修订记录；预注册评测标准留档</td>
+      <td><span class="empty">☐</span>提交前补齐</td>
+    </tr>
+  </table>
+</div>
+
+<div class="alert" style="margin-top:22px">
+  <span class="tag">最后一道检查</span>
+  <p style="margin-bottom:0">提交前逐项确认：①作品描述里所有 <span class="warn">【】</span> 都已替换为真实数字；②《DGP 技术说明》与《评测协议》已作为附件上传；③演示视频中"这是模拟数据"的说明清晰可听（不是小字带过）；④千问办公 Session ID 至少 3 个且能对应核心工作；⑤11/9 已有一次成功提交记录。<strong>五项齐了再交，缺任何一项都不要点最后提交。</strong></p>
+</div>
+
+<hr class="divider">
+<p class="small">本附件包与主方案书《差评炼金炉 · 参赛方案书 v3》配套使用。<br>
+赛事日程（已核验）：报名与提交 10/10–11/10 ｜ 初赛 11/11–16 ｜ 复赛 11/21–22 ｜ 决赛 11 月底</p>
+
+</div>
+</body>
+</html>

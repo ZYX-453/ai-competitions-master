@@ -1,0 +1,39 @@
+{
+  "seed": 20261110,
+  "generated_at": "2026-11-01T16:00:32",
+  "text_source": "online_shopping_10_cats（公开中文电商评论数据集，62,774 条，人工情感标注）",
+  "kept_categories": [
+    "服饰",
+    "数码",
+    "生鲜",
+    "个护"
+  ],
+  "excluded_categories": {
+    "酒店": "服务类，非零售电商",
+    "书籍": "图书类，非零售电商",
+    "热水器": "真实语料仅 474 条，样本量不足以支撑独立类目"
+  },
+  "transmission": {
+    "lambda1": 1.3,
+    "lambda2": 0.55,
+    "omega1": 0.64,
+    "omega2": 0.28,
+    "theta_price": -0.35
+  },
+  "compensation": {
+    "b0": -1.2,
+    "b1": 0.055,
+    "b2": 1.6,
+    "b3": -0.4,
+    "theta0": 0.05,
+    "theta1": 0.12,
+    "c0": 45.0
+  },
+  "business_scale": {
+    "sku_count": 158,
+    "annual_orders": 618058,
+    "annual_gmv": 70048149.2,
+    "avg_order_value": 113.34
+  },
+  "note": "文本层为真实公开语料，未做改写；SKU 主数据、经营面板、客服补偿记录为团队依据行业公开区间与上述冻结参数生成的模拟数据，用于因果识别与参数回收检验。"
+}

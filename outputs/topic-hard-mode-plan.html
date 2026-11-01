@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>差评炼金炉 · 难度升级方案（L2 决策引擎版）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: #16161f; color: #e6e6f0; line-height: 1.78;
+    padding: 44px 16px 72px; font-size: 15px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 27px; font-weight: 600; margin-bottom: 8px; color: #fff; letter-spacing: .3px; }
+  .sub { color: #8b8ba6; margin-bottom: 32px; font-size: 13.5px; }
+  h2 {
+    font-size: 19px; font-weight: 600; margin: 42px 0 16px;
+    padding-left: 13px; border-left: 4px solid #7f77dd; color: #cdc8f0;
+  }
+  h3 { font-size: 15.5px; font-weight: 600; margin: 20px 0 10px; color: #b3aee8; }
+  p { margin-bottom: 11px; }
+  .card {
+    background: #202030; border: 1px solid #30304a; border-radius: 12px;
+    padding: 18px 22px; margin-bottom: 15px;
+  }
+  .card.hl { border-color: #6a5acd; background: #232338; }
+  .card.danger { border-color: #8a4a4a; background: #2a2028; }
+  .alert {
+    background: #262038; border: 1px solid #6b4ab7; border-radius: 12px;
+    padding: 17px 22px; margin: 20px 0;
+  }
+  .alert .tag {
+    display: inline-block; background: #7f77dd; color: #fff;
+    border-radius: 6px; padding: 3px 11px; font-size: 12px; margin-bottom: 9px;
+    letter-spacing: .5px;
+  }
+  .ok { color: #7fd7a8; font-weight: 600; }
+  .warn { color: #e8b86d; font-weight: 600; }
+  .bad { color: #e88a8a; font-weight: 600; }
+  .dim { color: #8b8ba6; }
+  table { width: 100%; border-collapse: collapse; margin: 14px 0; font-size: 13.8px; }
+  th, td { border: 1px solid #30304a; padding: 10px 13px; text-align: left; vertical-align: top; }
+  th { background: #27273c; color: #cdc8f0; font-weight: 600; font-size: 13.5px; }
+  tr:nth-child(even) td { background: #1c1c2a; }
+  ul, ol { padding-left: 22px; margin-bottom: 10px; }
+  li { margin-bottom: 7px; }
+  .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 23px; height: 23px; border-radius: 50%; background: #7f77dd;
+    color: #fff; font-size: 12px; margin-right: 9px; flex-shrink: 0;
+  }
+  .flow { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin: 14px 0; }
+  .flow .step {
+    background: #27273c; border: 1px solid #45456b; border-radius: 8px;
+    padding: 9px 14px; font-size: 13px; line-height: 1.45;
+  }
+  .flow .arrow { color: #7f77dd; font-weight: 700; font-size: 15px; }
+  .small { font-size: 13px; color: #8b8ba6; }
+  .lvl {
+    display: inline-block; padding: 2px 9px; border-radius: 5px;
+    font-size: 12px; font-weight: 600; letter-spacing: .5px;
+  }
+  .l1 { background: #2d3a2d; color: #86c48a; }
+  .l2 { background: #3a2d4a; color: #b79af0; }
+  .l3 { background: #4a2d2d; color: #e88a8a; }
+  .updown { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  @media (max-width: 660px) { .updown { grid-template-columns: 1fr; } }
+  .updown > div { border-radius: 10px; padding: 13px 16px; font-size: 13.5px; }
+  .before { background: #1e1e2a; border: 1px solid #35354d; }
+  .after { background: #231f33; border: 1px solid #5b4a9e; }
+  .before .lab, .after .lab {
+    font-size: 11.5px; letter-spacing: 1px; display: block; margin-bottom: 6px; font-weight: 600;
+  }
+  .before .lab { color: #77778f; }
+  .after .lab { color: #a99af0; }
+  .divider { border: none; border-top: 1px dashed #30304a; margin: 30px 0; }
+  code {
+    background: #2a2a40; padding: 1px 6px; border-radius: 4px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px; color: #b8b0e8;
+  }
+  .quote { border-left: 3px solid #5b4a9e; padding-left: 14px; color: #a5a5bd; font-size: 13.5px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>差评炼金炉 · 难度升级方案</h1>
+<p class="sub">L2「VOC 决策引擎」版 ｜ 第一届AI管理实践挑战赛 · 市场营销与客户洞察 ｜ 2026-10-30 ｜ 距 11/10 截止 11 天</p>
+
+<div class="alert">
+  <span class="tag">先说结论</span>
+  <p>原方案的本质是<span class="warn">「LLM 打标 + 可视化看板」</span>——评委容易归到"提示词工程"一类。<span class="ok">难度必须压在三个地方才有区分度：因果量化、决策优化、严格评测。</span>单纯把功能做多（多加几个图表、多加几个输出）只会变累，不会变难。</p>
+  <p>推荐上 <span class="lvl l2">L2</span>：技术栈加一个中等难度的建模层 + 一套能被检验的评测体系，11 天做得完，且每一项都能直接换分。<span class="lvl l3">L3</span>（研究级）不推荐——见下方风险说明。</p>
+</div>
+
+<h2>一、难度阶梯：先选档，再动手</h2>
+<table>
+  <tr>
+    <th style="width:11%">档位</th>
+    <th style="width:26%">核心差异</th>
+    <th style="width:24%">需要的硬技能</th>
+    <th style="width:19%">评分上限</th>
+    <th style="width:20%">风险</th>
+  </tr>
+  <tr>
+    <td><span class="lvl l1">L1 原版</span><br><span class="small">归因→动作</span></td>
+    <td>LLM 打标 + KANO 归类 + 四份产物。定性传导链条、经验型补偿档位。</td>
+    <td>Prompt 设计、数据清洗、看板搭建</td>
+    <td>初赛能过，复赛容易被"和官方案例差不多"卡住</td>
+    <td>低。但拿不到 Know-how 与验证两维的高分</td>
+  </tr>
+  <tr>
+    <td><span class="lvl l2">L2 推荐</span><br><span class="small">决策引擎</span></td>
+    <td>在 L1 之上加：<strong>传导链弹性估计</strong>、<strong>补偿/改款的分类型优化</strong>、<strong>主动学习闭环</strong>、<strong>消融+一致性评测</strong>。</td>
+    <td>面板/回归（statsmodels）、逻辑回归、κ 一致性、消融设计、结构化输出约束</td>
+    <td>五维里四维能打满，Know-how 与验证质量是护城河</td>
+    <td>中。需严格控制范围，留砍单预案</td>
+  </tr>
+  <tr>
+    <td><span class="lvl l3">L3 不推荐</span><br><span class="small">研究级</span></td>
+    <td>真实因果识别（DID/合成控制）、多智能体自博弈编码本、真实 A/B 试验。</td>
+    <td>计量经济学、实验设计、多智能体编排</td>
+    <td>理论上最高</td>
+    <td><span class="bad">高</span>。11 天大概率跑不完，半成品反而扣"实际效果"分；真实 A/B 拿不到商家授权</td>
+  </tr>
+</table>
+<div class="quote">判断标准：<strong>能不能在作品描述里写出一句带数字的因果结论</strong>。L1 只能写"差评影响流量"，L2 能写"退货率每降 1pp，次周曝光提升约 X%（95%CI …），等效免费流量价值约 ¥Y/月"。这一句就是复赛和决赛的分水岭。</div>
+
+<h2>二、四个升级模块</h2>
+
+<h3>升级 1｜从「定性传导链」到「传导弹性量化」<span class="small">— 管理洞察维 · 最高权重</span></h3>
+<div class="updown">
+  <div class="before"><span class="lab">原方案</span>画一条箭头：差评 → 退货率 → DSR → 流量。属于常识陈述，评委会觉得"这谁都知道"。</div>
+  <div class="after"><span class="lab">升级后</span>用 SKU×周 面板数据估计两级弹性，把"差评是流量问题"从口号变成带置信区间的系数。</div>
+</div>
+<div class="card">
+  <p><strong>做什么</strong></p>
+  <ul>
+    <li><strong>一级传导</strong>：退货率 → DSR（滞后 1–2 周）。用固定效应面板回归，控制 SKU 与周固定效应，输出系数与 95%CI。</li>
+    <li><strong>二级传导</strong>：DSR → 曝光/访客（分布滞后，因为平台权重更新有延迟）。给出累计效应曲线。</li>
+    <li><strong>经济价值换算</strong>：曝光增量 × 类目平均转化率 × 客单价 = 等效免费流量价值，回答"降 1pp 退货率值多少钱"。</li>
+  </ul>
+  <p><strong>数据不够怎么办（关键降级路径）</strong>：真实面板拿不到 12 周以上时，用「结构方程 / PATH 图 + 文献参数校准 + 蒙特卡洛敏感性分析」——把每个系数的合理区间标出来，做龙卷风图说明结论稳健性。这是学术上完全站得住的做法，且比硬编一个假系数诚实得多。</p>
+  <p class="small">工具：statsmodels / linearmodels（面板）+ 千问办公出图与文档。所需数据见第四节新增项。</p>
+</div>
+
+<h3>升级 2｜从「一次性打标」到「主动学习闭环 + 编码本自演化」<span class="small">— 技术维</span></h3>
+<div class="updown">
+  <div class="before"><span class="lab">原方案</span>一次 prompt 批量打标，输出标签就完事。准确率无法自证，也没有改进机制。</div>
+  <div class="after"><span class="lab">升级后</span>带置信度与证据句的受控输出 + 低置信样本回流人工 + 冲突自动提示编码本修订，形成三条闭环。</div>
+</div>
+<div class="card">
+  <p><strong>三条闭环</strong></p>
+  <ol>
+    <li><strong>置信度闭环</strong>：强制 JSON schema 输出 <code>{primary_cause, sub_cause, confidence, evidence_span}</code>；<code>confidence &lt; 0.7</code> 自动进人工复检队列，复检结果转为 few-shot 示例回灌。</li>
+    <li><strong>双通道校验</strong>：LLM 打标 ⊗ 关键词/规则引擎（尺码、色差、破损、物流、客服态度各配关键词表）。两路不一致的样本标红进复检——这条能把准确率讲成一个"工程机制"而不是"运气好"。</li>
+    <li><strong>编码本自演化</strong>：统计复检中的冲突模式，自动提出「合并两类」「拆出一子类」的修订建议，人工确认后版本化（v1 → v2 → v3）。展示编码本 diff 就是最好的"学生自主增量"证据。</li>
+  </ol>
+  <p><strong>交付物</strong>：置信度校准曲线（reliability diagram，把预测置信度分箱对比实际准确率）+ 编码本版本演进表。</p>
+</div>
+
+<h3>升级 3｜从「经验档位」到「反事实决策优化」<span class="small">— 管理 + 技术双维 · Demo 记忆点</span></h3>
+<div class="updown">
+  <div class="before"><span class="lab">原方案</span>按归因类型给"补 20 元 / 补 50 元"的经验建议，本质是拍脑袋。</div>
+  <div class="after"><span class="lab">升级后</span>把补偿额度和改款投入都变成带目标函数的优化问题，给出"最优解 + 利润曲线拐点"。</div>
+</div>
+<div class="card">
+  <p><strong>① 补偿决策（一维优化）</strong></p>
+  <p>从客服历史对话拟合「补偿额度 → 挽单概率」曲线 P(c)（逻辑回归 / 阶梯拟合）。目标函数：</p>
+  <p style="text-align:center;margin:12px 0"><code>max&nbsp; π(c) = P(c)·(毛利 − c) − [1−P(c)]·(退货损失 + c)</code></p>
+  <p>网格搜索求每个归因类型的最优 c*，并说明为什么"全额退"在低毛利 SKU 上是亏的——这个反直觉结论很好讲。</p>
+
+  <p style="margin-top:16px"><strong>② 改款决策（带预算约束的排序）</strong></p>
+  <p>每个改款动作 = 成本 Cᵢ、预期降低退货率 Δrᵢ、影响销量 Qᵢ。先算 ROIᵢ = (Δrᵢ × Qᵢ × 客单价) / Cᵢ，再在预算上限下做 0-1 背包，输出<strong>改款优先级排序表 + 预算分配方案</strong>。这一步把"建议单"直接升级成"投资决策"。</p>
+
+  <p style="margin-top:16px"><strong>③ 决策沙盘（Demo 的杀手锏）</strong></p>
+  <p>在千问办公里做一个可交互面板：拖「补偿额度」「改款预算」两个滑杆，实时看到预计退货率、毛利、ROI 曲线的变化。评委亲手拖一下，比你讲十分钟 PPT 都管用。</p>
+</div>
+
+<h3>升级 4｜从「跑一遍看看」到「消融实验 + 一致性检验」<span class="small">— 验证维 · 最容易被忽视</span></h3>
+<div class="updown">
+  <div class="before"><span class="lab">原方案</span>挑 100 条看一致率 85%。单一指标，无法说明每个模块的贡献。</div>
+  <div class="after"><span class="lab">升级后</span>先证明人工标注本身可靠，再做消融拆贡献，最后给成本-效果权衡曲线。</div>
+</div>
+<div class="card">
+  <p><strong>四层证据链</strong></p>
+  <ol>
+    <li><strong>人工基线可信性</strong>：两人独立标 200 条，先算 Cohen's κ。κ &lt; 0.6 说明任务定义本身模糊——那就先改编码本，这个反思过程写进材料反而是加分项。</li>
+    <li><strong>工具质量</strong>：macro-F1、分类型混淆矩阵、κ(工具 vs 人工金标准)。别只报准确率，类别不平衡下会失真。</li>
+    <li><strong>消融实验</strong>：分别去掉 KANO 规则 / few-shot 回灌 / 双通道校验 / 证据句约束，看 macro-F1 各掉多少。这张表直接证明"模块不是堆的，每个都有用"。</li>
+    <li><strong>成本-效果权衡</strong>：置信度阈值取 0.6 / 0.7 / 0.8 时，自动化覆盖率 vs 准确率的权衡曲线，给出"推荐阈值 + 理由"。再算单条归因成本（token 费 + 人工分钟）对比纯人工的降幅。</li>
+  </ol>
+</div>
+
+<h2>三、升级后的整体架构</h2>
+<div class="flow">
+  <div class="step"><strong>数据层</strong><br><span class="small">评论 / 退货 / 客服 / 面板</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>清洗脱敏</strong><br><span class="small">去 PII · 类目归一</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>归因引擎</strong><br><span class="small">LLM + 规则双通道</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>主动学习</strong><br><span class="small">低置信复检 · 编码本演化</span></div>
+</div>
+<div class="flow">
+  <div class="step"><strong>传导模型</strong><br><span class="small">面板回归 · 弹性估计</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>决策优化</strong><br><span class="small">补偿 c* · 改款背包</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>决策沙盘</strong><br><span class="small">交互滑杆 · 反事实</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>评测台</strong><br><span class="small">κ · F1 · 消融</span></div>
+</div>
+<p class="small">相对原版新增三块：<span class="ok">传导模型、决策优化、评测台</span>。原版的归因看板与四份产物全部保留，作为"执行层"输出。</p>
+
+<h2>四、数据需求增量（在上一轮 5 类基础上补 3 类）</h2>
+<table>
+  <tr><th style="width:24%">新增数据</th><th style="width:38%">字段</th><th style="width:20%">用途</th><th style="width:18%">替代方案</th></tr>
+  <tr>
+    <td><strong>SKU×周 经营面板</strong><br><span class="small">最关键</span></td>
+    <td>SKU、周次、退货率、DSR/评分、曝光、访客、转化率、客单价、销量</td>
+    <td>传导弹性估计（升级 1）+ ROI 计算</td>
+    <td>商家后台可导；拿不到就用模拟面板 + 文献校准</td>
+  </tr>
+  <tr>
+    <td><strong>客服补偿-结果记录</strong></td>
+    <td>每次对话的补偿金额、是否挽单成功、订单毛利、退货损失</td>
+    <td>拟合 P(c) 挽单概率曲线（升级 3）</td>
+    <td>无历史就用千问办公生成符合业务逻辑的模拟样本并注明</td>
+  </tr>
+  <tr>
+    <td><strong>人工金标准标注集</strong></td>
+    <td>200 条双人独立标注（归因类型 + 子类）</td>
+    <td>κ 基线 + F1 评测（升级 4）</td>
+    <td>必须自己做，无法替代——这本身是"学生自主增量"的证据</td>
+  </tr>
+</table>
+<p class="small">上一轮的 5 类（评论、退货原因、客服对话、商品信息、经营结果）保留不变。总量参考：评论 ≥1500 条、退货原因 ≥300 条、客服对话 ≥150 组、面板 ≥12 周（实在不行 8 周）、金标准 200 条。</p>
+
+<h2>五、五维评审对照（升级后）</h2>
+<table>
+  <tr><th style="width:24%">评审维度</th><th style="width:38%">L1 能给的</th><th style="width:38%">L2 能给的</th></tr>
+  <tr>
+    <td>管理问题洞察与行业 Know-how</td>
+    <td>传导链的定性描述</td>
+    <td><span class="ok">带 95%CI 的两级弹性系数 + 等效流量价值换算</span>，Know-how 变成可检验的经济结论</td>
+  </tr>
+  <tr>
+    <td>AI 工具设计与 Vibe Coding</td>
+    <td>单次 prompt + 看板</td>
+    <td><span class="ok">结构化输出约束 + 主动学习闭环 + 决策沙盘</span>，是系统不是脚本</td>
+  </tr>
+  <tr>
+    <td>学生自主增量与创新性</td>
+    <td>自建编码本、评分公式</td>
+    <td><span class="ok">编码本 v1→v3 演进证据 + 双通道校验机制 + 背包式改款排序</span>，增量看得见</td>
+  </tr>
+  <tr>
+    <td>实际效果与验证质量</td>
+    <td>一条 85% 一致率</td>
+    <td><span class="ok">κ 基线 + macro-F1 + 四组消融 + 阈值权衡曲线 + 成本降幅</span>，证据链完整</td>
+  </tr>
+  <tr>
+    <td>通用性与落地潜力</td>
+    <td>换类目可复用</td>
+    <td><span class="ok">类目编码包可插拔 + 决策参数可重标定</span>，换行业只需换配置</td>
+  </tr>
+</table>
+
+<h2>六、11 天重排（L2）</h2>
+<div class="card">
+  <ul>
+    <li><strong>10/30–10/31</strong>：定题 + 组队 + 报名。同步做一件事：确认能不能拿到商家后台面板数据（这决定升级 1 走真实还是走模拟）。</li>
+    <li><strong>11/1–11/2</strong>：数据到位 + 清洗脱敏 + 编码本 v1 定稿；双人各标 100 条算 κ（这步不能拖，κ 不过关要返工编码本）。</li>
+    <li><strong>11/3–11/4</strong>：归因引擎（结构化输出 + 双通道）跑通；面板回归出第一版弹性系数。此时应该有一条能写进文档的因果结论了。</li>
+    <li><strong>11/5–11/6</strong>：决策优化（补偿 c* + 改款背包）+ 主动学习闭环；四组消融实验跑完。</li>
+    <li><strong>11/7</strong>：千问办公里搭决策沙盘与看板，全流程截图 + 记 Session ID。</li>
+    <li><strong>11/8</strong>：写作品描述（600–1600 字）、录演示视频、画关键步骤图。</li>
+    <li><strong>11/9–11/10</strong>：提交 + 带话题分享拿积分。<span class="warn">11/9 前必须有一次完整提交</span>，别赌最后一刻。</li>
+  </ul>
+</div>
+
+<h2>七、砍单预案（时间不够按顺序砍）</h2>
+<table>
+  <tr><th style="width:8%">优先级</th><th style="width:34%">模块</th><th style="width:58%">砍掉后的降级形态</th></tr>
+  <tr><td class="ok">必保</td><td>决策沙盘（交互）+ κ/F1 评测</td><td>不可砍。沙盘是评委记忆点，评测是验证维度分</td></tr>
+  <tr><td class="ok">必保</td><td>双通道校验</td><td>不可砍，它撑起"工程机制"的叙事</td></tr>
+  <tr><td class="warn">次保</td><td>传导弹性估计</td><td>降级为 PATH 图 + 文献参数 + 龙卷风敏感性图，诚实标注局限</td></tr>
+  <tr><td class="warn">次保</td><td>改款背包优化</td><td>降级为 ROI 排序表（不做预算约束求解）</td></tr>
+  <tr><td class="dim">可砍</td><td>编码本全自动演化</td><td>降级为半自动：系统提建议、人工确认，仍是自主增量</td></tr>
+  <tr><td class="dim">可砍</td><td>四组消融</td><td>减到两组（去 KANO、去双通道），保住"有消融"这个动作</td></tr>
+</table>
+
+<h2>八、两个必须注意的坑</h2>
+<div class="card danger">
+  <p><strong>坑 1｜合规：核心产物必须在千问办公里生成。</strong>升级后你会想用 Python 做回归、sklearn 做拟合——<span class="warn">这属于规则允许的"第三方工具辅助"，但最终交付的看板、沙盘、报告必须在千问办公里搭出来</span>，且 Session ID 要能体现千问办公承担了核心工作。别在本地全做完只截个图，那是明确违规。</p>
+  <p style="margin-top:14px"><strong>坑 2｜别把"难"做成"多"。</strong>再加五个图表不会让评委觉得难，只会让 Demo 讲不完。真正的难度信号是：<span class="ok">一句带置信区间的因果结论、一张消融表、一个能拖动滑杆的反事实沙盘</span>。三样齐了，L2 就立住了。</p>
+</div>
+
+<h2>九、团队分工建议（4 人最优）</h2>
+<table>
+  <tr><th style="width:18%">角色</th><th style="width:44%">负责模块</th><th style="width:38%">必须具备</th></tr>
+  <tr><td>数据/建模</td><td>面板回归、P(c) 拟合、背包优化、消融实验</td><td>statsmodels / sklearn，会解释系数含义</td></tr>
+  <tr><td>AI 工程</td><td>结构化输出、双通道校验、主动学习闭环、沙盘搭建</td><td>千问办公熟练 + JSON schema 思维</td></tr>
+  <tr><td>业务/管理</td><td>编码本设计、KANO 判定、Know-how 撰写、作品描述</td><td>经管背景，能把模型结果翻译成经营语言</td></tr>
+  <tr><td>材料/视觉</td><td>演示视频、步骤图、看板视觉、最终提交</td><td>剪辑 + 排版，掌控交付质量</td></tr>
+</table>
+<p class="small">3 人队就把"材料/视觉"并给业务/管理那位；5 人队可加一人专攻评测与数据合规。</p>
+
+<hr class="divider">
+<p class="small">参考：赛事官网 aiproductivitymanagement.qwenwork.host ｜ 官方案例库 usecase.qwenwork.host ｜ 课程 learn.qwenwork.host/courses ｜《赛事细则》钉钉文档需登录，组队后通读<br>
+本期日程（已核验）：报名与提交 10/10–11/10 ｜ 初赛 11/11–16 ｜ 复赛 11/21–22 ｜ 决赛 11 月底</p>
+
+</div>
+</body>
+</html>

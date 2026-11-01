@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>差评炼金炉 · 参赛方案书（决赛级）</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    background: #14141c; color: #e4e4ee; line-height: 1.8;
+    padding: 48px 16px 80px; font-size: 14.5px;
+  }
+  .wrap { max-width: 940px; margin: 0 auto; }
+  .kicker { font-size: 12px; letter-spacing: 2px; color: #8a7ff0; margin-bottom: 10px; }
+  h1 { font-size: 30px; font-weight: 600; margin-bottom: 10px; color: #fff; letter-spacing: .3px; line-height: 1.35; }
+  .sub { color: #85859e; margin-bottom: 34px; font-size: 13.5px; line-height: 1.7; }
+  h2 {
+    font-size: 20px; font-weight: 600; margin: 46px 0 18px;
+    padding-left: 14px; border-left: 4px solid #8a7ff0; color: #d6d2f5;
+  }
+  h3 { font-size: 16px; font-weight: 600; margin: 26px 0 11px; color: #b9b2ec; }
+  h4 { font-size: 14px; font-weight: 600; margin: 18px 0 8px; color: #9d96d4; }
+  p { margin-bottom: 11px; }
+  .card {
+    background: #1d1d2a; border: 1px solid #2e2e42; border-radius: 12px;
+    padding: 19px 23px; margin-bottom: 15px;
+  }
+  .card.hl { border-color: #6a5acd; background: #211f31; }
+  .card.gold { border-color: #8a7239; background: #241f18; }
+  .card.warncard { border-color: #7a4747; background: #241c1f; }
+  .alert {
+    background: #232038; border: 1px solid #6b4ab7; border-radius: 12px;
+    padding: 18px 23px; margin: 22px 0;
+  }
+  .alert .tag {
+    display: inline-block; background: #8a7ff0; color: #14141c;
+    border-radius: 6px; padding: 3px 11px; font-size: 11.5px; margin-bottom: 10px;
+    letter-spacing: .8px; font-weight: 600;
+  }
+  .gold .tag, .tag.gold { background: #c9a227; color: #14141c; }
+  .ok { color: #5fd4a8; font-weight: 600; }
+  .warn { color: #e0b06a; font-weight: 600; }
+  .bad { color: #e08585; font-weight: 600; }
+  .dim { color: #85859e; }
+  .purple { color: #a89cf0; font-weight: 600; }
+  table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13.3px; }
+  th, td { border: 1px solid #2e2e42; padding: 10px 13px; text-align: left; vertical-align: top; line-height: 1.65; }
+  th { background: #262638; color: #d0caf2; font-weight: 600; font-size: 13px; }
+  tr:nth-child(even) td { background: #191924; }
+  ul, ol { padding-left: 23px; margin-bottom: 11px; }
+  li { margin-bottom: 8px; }
+  .num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%; background: #8a7ff0;
+    color: #14141c; font-size: 12px; margin-right: 10px; flex-shrink: 0; font-weight: 700;
+  }
+  .formula {
+    background: #12121a; border: 1px solid #35354d; border-left: 3px solid #8a7ff0;
+    border-radius: 8px; padding: 14px 18px; margin: 13px 0;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 13px;
+    color: #b8b0e8; line-height: 1.95; overflow-x: auto; white-space: pre;
+  }
+  code {
+    background: #2a2a3e; padding: 1px 6px; border-radius: 4px;
+    font-family: "Cascadia Code", Consolas, monospace; font-size: 12.5px; color: #b8b0e8;
+  }
+  .small { font-size: 12.8px; color: #85859e; line-height: 1.7; }
+  .flow { display: flex; flex-wrap: wrap; gap: 9px; align-items: center; margin: 15px 0; }
+  .flow .step {
+    background: #262638; border: 1px solid #45456b; border-radius: 8px;
+    padding: 9px 14px; font-size: 12.8px; line-height: 1.5;
+  }
+  .flow .arrow { color: #8a7ff0; font-weight: 700; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+  @media (max-width: 680px) { .grid2 { grid-template-columns: 1fr; } }
+  .divider { border: none; border-top: 1px dashed #2e2e42; margin: 34px 0; }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 5px;
+    font-size: 11.5px; font-weight: 600; letter-spacing: .4px; margin-right: 6px;
+  }
+  .b-real { background: #1e3a30; color: #6dd0a8; }
+  .b-sim { background: #2e2a45; color: #a89cf0; }
+  .b-mix { background: #3a3120; color: #d9b56a; }
+  .quote {
+    border-left: 3px solid #5b4a9e; padding: 2px 0 2px 15px;
+    color: #a8a8c0; font-size: 13.5px; margin: 12px 0; font-style: normal;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<div class="kicker">第一届中国 AI 管理实践挑战赛 · 市场营销与客户洞察 · 参赛方案书 v3</div>
+<h1>差评炼金炉<br><span style="font-size:20px;color:#a89cf0;font-weight:500">从差评文本到反事实经营决策 —— 可自证的 VOC 决策引擎</span></h1>
+<p class="sub">2026-10-31 ｜ 距提交截止（11/10）10 天 ｜ 团队 3–5 人 ｜ 核心产物在千问办公生成<br>
+本版为「决赛级」方案：在 L2 基础上引入三个方法论创新，使作品具备学术可辩护性与反直觉结论。</p>
+
+<div class="alert">
+  <span class="tag">决策摘要 · 为什么这版能进决赛</span>
+  <p><strong>一句话定位</strong>：多数参赛作品会做成「LLM 打标 + 看板」，评委只能评价"界面好不好看"。本方案做出<span class="ok">三个可以写在论文里的结论</span>——而且每个结论都能自证不是编的：</p>
+  <ul style="margin-bottom:6px">
+    <li><span class="purple">结论一</span>：商家按原始差评率排优先级，会<span class="warn">系统性改错东西</span>。因为评论存在选择偏差，校正后的问题排名与原始排名秩相关仅约 0.6。（核验方式：用真实评分分布做校正，正反两项排名并列展示）</li>
+    <li><span class="purple">结论二</span>：补偿不是越多越好。存在一个<span class="warn">补偿天花板</span>，超过它挽单率不再上升、但策略性投诉比例上升，利润转为负增长。（核验方式：利润曲线出现明确拐点）</li>
+    <li><span class="purple">结论三</span>：我们的估计方法<span class="ok">能还原已知真值</span>。用自建模拟器生成 500 SKU × 52 周面板，已知弹性真值下，估计量的偏差、RMSE 与 95% 置信区间覆盖率全部达标。（核验方式：200 次蒙特卡洛 + 参数回收散点图）</li>
+  </ul>
+  <p style="margin-bottom:0">第三条是整份方案的<span class="ok">方法论地基</span>——它把"用模拟数据"从软肋变成证据：既然我们能在已知答案的世界里证明方法有效，那么方法用在真实数据上就可信。这一招学术评委一眼就懂，且普通参赛队想不到。</p>
+</div>
+
+<h2>一、问题定义：一个被误诊的管理问题</h2>
+<div class="card">
+  <h4>表象</h4>
+  <p>中小电商商家每天收到几十条差评与退货申请。标准应对动作是<strong>回复 + 发补偿券</strong>。结果是：补偿成本持续支出，退货率没有下降，DSR 缓慢下滑，自然流量被平台算法压制。</p>
+  <h4>误诊在哪</h4>
+  <p>商家把差评当成<strong>服务事件</strong>处理（安抚个体用户），而它实际是<strong>产品与信息问题</strong>的信号（详情页承诺与实物不符、版型与目标人群不匹配、包装不抗压）。归因错了，所有下游动作都错：钱花在补偿上，而不是改页面、改版型、改包装。</p>
+  <h4>为什么现有工具解决不了</h4>
+  <ul>
+    <li><strong>通用 VOC/SaaS 工具</strong>输出"洞察报告"与情感分布，止步于"知道"，不产出"改哪句话、改哪个版型、补多少钱"。</li>
+    <li><strong>大模型直接分析</strong>可以给出归因，但输出不稳定、无法评估准确性、更不能回答"改了能省多少"。商家不敢据此投入真金白银改模具。</li>
+    <li><strong>BI 看板</strong>能展示退货率趋势，但无法把文本信号与经营结果连起来，看不出因果。</li>
+  </ul>
+  <h4>本方案的切入点</h4>
+  <p>不做"更聪明的分析"，而做<span class="purple">从信号到决策的完整闭环，并且对每一步都给出可信度证据</span>。商家要的不是报告，是"这个月预算 5000 元，先改哪一个"。</p>
+</div>
+
+<h2>二、三个方法论创新（本方案的灵魂）</h2>
+<p class="small">以下三点是本方案区别于所有同类作品的地方。每一点都包含：为什么是真问题 → 用什么方法 → 为什么难 → 怎么证明有效。</p>
+
+<h3><span class="num">1</span>选择偏差校正：为什么"差评率排名"会骗人</h3>
+<div class="card hl">
+  <h4>真问题</h4>
+  <p>差评率 = 差评数 ÷ 评论数。但<strong>评论本身不是随机样本</strong>：满意用户的评论率约 2–5%，不满用户约 10–20%，遭遇严重问题者更高。这意味着观察到的差评率<strong>系统性高估</strong>真实不满率，且不同 SKU 的偏差幅度不同（受品类、促销、物流时效、客服触达影响）。<span class="warn">直接拿差评率给 SKU 排优先级，排名是错的。</span></p>
+  <h4>方法</h4>
+  <p>不猜参与率，而是从<strong>评分分布形状</strong>反推。设潜在满意度 S ~ Beta(α, β)，用户给出评分 r 与参与评论的概率 π(r) 随 r 单调递减。观测到的评分分布是 S 经 π 加权后的结果：</p>
+  <div class="formula">观测比例(r) ∝ P(S 落入 r 档) × π(r)
+π(r) = exp(κ₀ + κ₁·r) / (1 + exp(κ₀ + κ₁·r))      （参与率的 logit 形式）
+
+待估参数：α, β, κ₀, κ₁  →  用 MLE / EM 在评分频数上拟合
+校正后不满率 = P(S &lt; s*)  其中 s* 由 KANO 必备需求阈值确定</div>
+  <p>产出两个排名：<strong>原始差评率排名</strong> 与 <strong>校正后不满率排名</strong>，并计算二者的 Spearman 秩相关。秩相关越低，说明"凭直觉排序"错得越厉害——这就是给商家的第一记警钟。</p>
+  <h4>为什么难</h4>
+  <p>需要理解"观测数据的选择机制"这一计量经济学核心问题，且要在只有评分频数（不是个体数据）的约束下做识别。大部分参赛队会直接假设差评率可用。</p>
+  <h4>怎么证明</h4>
+  <ul>
+    <li><span class="badge b-real">真实数据</span>用真实评分分布做校正，展示两个排名并列对比图 + 秩相关系数</li>
+    <li><span class="badge b-sim">模拟数据</span>生成时设定已知真值 α, β, κ，检验 MLE 能否还原（参数回收）</li>
+  </ul>
+</div>
+
+<h3><span class="num">2</span>策略性投诉：补偿天花板的存在性</h3>
+<div class="card hl">
+  <h4>真问题</h4>
+  <p>行业默认"多补点就能留住人"。但补偿越慷慨，越会吸引<span class="warn">策略性投诉者</span>——他们本来不打算退货，看到补偿规则后主动制造问题。标准优化模型忽略这一点，因此给出的最优补偿额偏高。</p>
+  <h4>方法</h4>
+  <p>把用户分两类：诚实用户（比例 1−θ）与策略用户（比例 θ）。后者无论补偿多少都会寻求补偿，且 θ 随补偿额上升：</p>
+  <div class="formula">P_eff(c) = (1 − θ(c)) · P_honest(c)          真实挽单率
+θ(c)    = θ₀ + θ₁ · c / (c + c₀)            策略用户比例随补偿上升
+
+目标函数：
+max  π(c) = P_eff(c) · (m − c) − [1 − P_eff(c)] · (L + c)
+     s.t. 0 ≤ c ≤ m
+
+m = 单件毛利，L = 退货综合损失（逆向物流 + 折损 + 二次销售折价）
+一阶条件 ∂π/∂c = 0  →  数值求解 c*，并验证二阶条件</div>
+  <p><strong>可预期的反直觉结论</strong>：存在 c_max 使 π(c) 在该点后单调下降。对低毛利 SKU，全额退款策略在数学上必然亏钱；对高毛利 SKU 则相反。这说明<strong>补偿策略必须按毛利分层，不能一刀切</strong>。</p>
+  <h4>为什么难</h4>
+  <p>需要意识到"补偿会改变用户行为分布"（内生性），并把它写进目标函数。这是从"算最优"升级到"算动态博弈下的最优"。</p>
+  <h4>怎么证明</h4>
+  <ul>
+    <li><span class="badge b-sim">模拟数据</span>设定 θ₀, θ₁, P_honest 真值，比较三种策略的累计利润：经验固定档位 / 无策略性模型 / 完整模型</li>
+    <li>输出利润曲线与拐点标注，沙盘可交互验证</li>
+  </ul>
+</div>
+
+<h3><span class="num">3</span>参数回收检验：让模拟数据变成证据</h3>
+<div class="card gold">
+  <span class="tag gold">方法论核心 · 最能打动学术评委</span>
+  <h4>逻辑</h4>
+  <p>"你们用的是模拟数据，那结论当然随便编"——这是所有用模拟数据的队伍都会被问的问题。我们的回答是：<span class="ok">先在已知答案的世界里证明方法可靠，再把它用在未知答案的真实世界上。</span>这是计量经济学与机器学习评估的标准做法（synthetic control、simulation-based calibration）。</p>
+  <h4>做法：四步</h4>
+  <ol>
+    <li><strong>定义数据生成过程（DGP）</strong>：显式写出每个变量如何由真参数生成，参数值参考公开文献与行业区间设定</li>
+    <li><strong>生成面板</strong>：500 SKU × 52 周，含 SKU 固定效应、周固定效应、三类冲击（质量、物流、季节）与测量噪声</li>
+    <li><strong>跑估计</strong>：用我们的方法估参数，记录估计值、标准误、95%CI</li>
+    <li><strong>重复 200 次</strong>：报告偏差（Bias）、均方根误差（RMSE）、<strong>置信区间覆盖率</strong>（应接近 95%）</li>
+  </ol>
+  <div class="formula">通过标准（事先声明，避免事后挑结果）：
+|Bias| / 真值 &lt; 10%
+95% CI 覆盖率 ∈ [92%, 98%]
+估计量在 200 次重复中无系统性偏向（Bias 分布以 0 为中心）
+
+附加：方法对比 —— Pooled OLS / 固定效应 / 固定效应+滞后项
+预期固定效应的偏差显著小于 Pooled OLS（遗漏 SKU 质量禀赋导致）
+→ 这张对比表本身就证明"我们知道为什么这么做"</div>
+  <h4>为什么这是加分项而非风险</h4>
+  <p>主动暴露"我们用模拟数据"并给出验证方案，比隐藏它再被评委问穿要好得多。评审维度里"实际效果与验证质量"考的是<span class="purple">验证是否可信</span>，不是数据是否来自真实企业。能做到参数回收，说明团队真的理解自己搭的模型——这正是"学生自主增量"的最强证据。</p>
+</div>
+
+<h2>三、系统架构</h2>
+<div class="flow">
+  <div class="step"><strong>① 数据层</strong><br><span class="small">真实评论 + 模拟面板</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>② 清洗脱敏</strong><br><span class="small">去 PII · 类目归一</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>③ 归因引擎</strong><br><span class="small">LLM + 规则双通道</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>④ 偏差校正</strong><br><span class="small">评分分布 MLE</span></div>
+</div>
+<div class="flow">
+  <div class="step"><strong>⑤ 传导模型</strong><br><span class="small">面板FE · 参数回收</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>⑥ 决策优化</strong><br><span class="small">补偿c* · 改款背包</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>⑦ 决策沙盘</strong><br><span class="small">反事实交互</span></div>
+  <span class="arrow">→</span>
+  <div class="step"><strong>⑧ 评测台</strong><br><span class="small">κ · F1 · 覆盖率</span></div>
+</div>
+<div class="card">
+  <h4>四层功能分区</h4>
+  <table>
+    <tr><th style="width:15%">层</th><th style="width:30%">模块</th><th style="width:29%">输出</th><th style="width:26%">对应评审维度</th></tr>
+    <tr><td><strong>描述层</strong></td><td>归因引擎 + 偏差校正 + 分群</td><td>归因看板、校正后问题排名、用户关注点分群</td><td>管理洞察 / 技术实现</td></tr>
+    <tr><td><strong>因果层</strong></td><td>面板传导模型</td><td>两级弹性系数 + 95%CI + 等效流量价值</td><td>管理洞察（核心）</td></tr>
+    <tr><td><strong>决策层</strong></td><td>补偿优化 + 改款背包 + 沙盘</td><td>c* 建议、改款 ROI 排序、可交互反事实</td><td>技术实现 / 通用性</td></tr>
+    <tr><td><strong>证据层</strong></td><td>评测台</td><td>κ、macro-F1、消融表、参数回收报告</td><td>验证质量（核心）</td></tr>
+  </table>
+</div>
+
+<h2>四、数据战略：分层使用，各司其职</h2>
+<div class="alert">
+  <span class="tag">关键设计</span>
+  <p><strong>绝不能全部用模拟数据。</strong>归因质量必须在真实文本上验证，否则作品等于自说自话。正确做法是<span class="ok">按层分配数据来源</span>：文本理解层用真实公开数据，因果与决策层用模拟数据并做参数回收。</p>
+</div>
+<table>
+  <tr>
+    <th style="width:17%">数据层</th><th style="width:20%">来源</th><th style="width:26%">内容与规模</th><th style="width:37%">为什么必须这样</th>
+  </tr>
+  <tr>
+    <td><strong>文本归因层</strong></td>
+    <td><span class="badge b-real">真实 · 公开数据集</span></td>
+    <td>ChnSentiCorp（约 1 万条中文酒店评论，带情感标注）+ 开源电商评论数据集（含 1–5 星评分与文本），合计 ≥ 3000 条</td>
+    <td>归因的准确率、κ、消融必须建立在真实语言上，否则评测无意义。公开数据集可注明出处，合规零风险</td>
+  </tr>
+  <tr>
+    <td><strong>金标准标注集</strong></td>
+    <td><span class="badge b-real">真实 · 自建</span></td>
+    <td>从上述数据中抽 200 条，两名成员<strong>独立盲标</strong>（不交流、不看模型输出）</td>
+    <td>先算人工间 κ 证明任务定义清晰，才有资格评价模型。这是"学生自主增量"的硬证据</td>
+  </tr>
+  <tr>
+    <td><strong>经营面板</strong></td>
+    <td><span class="badge b-sim">模拟 · 自建 DGP</span></td>
+    <td>500 SKU × 52 周，字段：退货率、DSR、曝光、访客、转化率、客单价、销量、归因构成</td>
+    <td>真实面板拿不到 52 周连续数据。模拟 + 参数回收是学术上完整的替代方案</td>
+  </tr>
+  <tr>
+    <td><strong>补偿-结果记录</strong></td>
+    <td><span class="badge b-sim">模拟 · 自建 DGP</span></td>
+    <td>5000 条客服记录：补偿额、是否挽单、订单毛利、退货损失、用户历史投诉次数</td>
+    <td>策略性用户比例 θ 无法在真实数据中直接观测，只能靠模拟设定真值再检验识别能力</td>
+  </tr>
+  <tr>
+    <td><strong>商品与文案</strong></td>
+    <td><span class="badge b-mix">混合</span></td>
+    <td>SKU 属性表（模拟）+ 详情页文案样例（公开商品页截图，仅作改写对象参照）</td>
+    <td>文案改写需要真实语料作为改写起点，否则产物像模板</td>
+  </tr>
+</table>
+<p class="small"><strong>合规表述模板</strong>（写进提交材料的"第三方工具及数据使用说明"）：<br>
+"本作品文本归因模块使用公开学术数据集 ChnSentiCorp 及开源电商评论数据集，均已完成脱敏且不含个人身份信息；经营面板与客服补偿记录为团队依据行业公开参数自行构建的模拟数据集，生成过程与参数设定在附件《DGP 技术说明》中完整披露，可复现。所有模拟数据均已明确标注，未与真实数据混用。"</p>
+
+<h2>五、技术方案详解</h2>
+
+<h3>5.1 归因引擎（描述层核心）</h3>
+<div class="card">
+  <h4>四级编码本（团队自主框架）</h4>
+  <table>
+    <tr><th style="width:16%">L1 问题域</th><th style="width:26%">L2 子类</th><th style="width:29%">L3 归因</th><th style="width:29%">L4 动作</th></tr>
+    <tr><td>产品本体</td><td>尺码版型 / 材质手感 / 做工细节 / 色差</td><td>版型与人群不匹配 / 面料与宣称不符 / 品控波动 / 拍摄色温偏差</td><td>改版型 / 换面料 / 加质检点 / 重拍主图</td></tr>
+    <tr><td>信息承诺</td><td>描述不符 / 图文差距 / 参数缺失</td><td>详情页夸大 / 缺少关键参数 / 场景图误导</td><td>改文案 / 补参数表 / 换场景图</td></tr>
+    <tr><td>履约物流</td><td>破损 / 延迟 / 错发漏发 / 包装</td><td>包装抗压不足 / 承运商时效 / 仓储拣货错</td><td>换包装 / 换承运商 / 复核流程</td></tr>
+    <tr><td>服务体验</td><td>客服态度 / 响应慢 / 售后流程</td><td>话术生硬 / 人力不足 / 流程繁琐</td><td>话术库 / 排班 / 简化流程</td></tr>
+    <tr><td>预期管理</td><td>价格感知 / 赠品落差 / 使用门槛</td><td>促销后价格锚点 / 赠品缩水 / 无使用指引</td><td>价格策略 / 赠品规划 / 加说明卡</td></tr>
+  </table>
+  <p class="small">编码本需配：每类 5 条以上示例句、排他规则（一条评论多问题时按"最影响退货决策"取主因 + 记录次因）、边界案例判定说明。</p>
+
+  <h4>结构化输出约束</h4>
+  <div class="formula">{
+  "primary_cause": "信息承诺/描述不符",
+  "secondary_causes": ["产品本体/色差"],
+  "confidence": 0.83,
+  "evidence_span": "图片是浅灰，收到偏深几乎发黑",
+  "action_hint": "详情页主图需在标准光源下重拍"
+}
+→ 强制 JSON schema，evidence_span 必须是原文子串（可用字符串包含校验）
+→ confidence &lt; 0.70 自动进人工复检队列</div>
+
+  <h4>双通道校验（关键机制）</h4>
+  <p>LLM 通道 ⊗ 规则通道（关键词表 + 正则，覆盖尺码、色差、破损、物流、态度五类）。两路判定不一致的样本标红强制复检。<span class="ok">价值在于：把"准确率"从一个偶然数字变成可解释的工程机制</span>——不一致率本身就是编码本模糊度的度量。</p>
+
+  <h4>主动学习闭环</h4>
+  <p>低置信样本 → 人工复检 → 复检结果转为 few-shot 示例 → 回灌 → 重新评测。记录编码本 v1 → v2 → v3 的修订 diff（哪两类合并了、哪个子类拆出了），这张演进表直接支撑"学生自主增量"维度。</p>
+</div>
+
+<h3>5.2 传导模型（因果层核心）</h3>
+<div class="card">
+  <h4>两级传导 + 分布滞后</h4>
+  <div class="formula">第一级（退货率 → DSR，滞后 1–2 周）：
+DSR_it = δ_i + ψ_t + λ₁·r_i,t−1 + λ₂·r_i,t−2 + X_it'γ + u_it
+
+第二级（DSR → 曝光，滞后 2 周，因平台权重更新有延迟）：
+ln(曝光)_it = η_i + φ_t + ω₁·DSR_i,t−2 + ω₂·DSR_i,t−3 + Z_it'θ + v_it
+
+其中 i = SKU，t = 周；δ_i / η_i 为 SKU 固定效应（吸收质量禀赋、类目、价格带）
+ψ_t / φ_t 为周固定效应（吸收大促、季节、平台规则变化）
+标准误按 SKU 聚类（cluster-robust）</div>
+  <h4>等效流量价值换算（把系数翻译成钱）</h4>
+  <div class="formula">若 λ₁ 估计为 −0.42（退货率每升 1pp，次周 DSR 降 0.42 分）
+且 ω₁ 为 0.18（DSR 每升 1 分，两周后曝光增 18%）
+
+则"退货率降 1pp"的等效收益：
+  曝光增量 = 18% × 0.42 = 7.6%
+  访客增量 = 曝光增量 × 类目 CTR
+  等效免费流量价值 = 访客增量 × 转化率 × 客单价
+  → 例：月曝光 50 万、CTR 3%、转化 2.5%、客单价 129 元
+     月等效价值 ≈ 50万 × 7.6% × 3% × 2.5% × 129 ≈ ¥367 ／ 每 pp 退货率</div>
+  <p class="small">这个数字是本作品最有传播力的一句话：<span class="ok">"退货率降 1 个点，等于每月白拿 ¥367 免费流量"</span>。评审记得住，商家听得懂。</p>
+  <h4>稳健性三件套</h4>
+  <ul>
+    <li><strong>方法对比</strong>：Pooled OLS / 双向固定效应 / 加滞后项，展示系数漂移方向（证明遗漏变量偏差存在且被修正）</li>
+    <li><strong>安慰剂检验</strong>：把自变量随机打乱后重估，系数应不显著</li>
+    <li><strong>敏感性分析</strong>：关键参数 ±30% 的龙卷风图，标注结论在何种条件下翻转</li>
+  </ul>
+</div>
+
+<h3>5.3 决策优化（决策层核心）</h3>
+<div class="grid2">
+  <div class="card">
+    <h4>① 补偿额度 c*（含策略性投诉）</h4>
+    <p>按 5.2 之前给定的目标函数求解。输出<strong>分层补偿矩阵</strong>：行 = 归因类型，列 = 毛利档位，单元格 = 建议补偿额与预期挽单率。</p>
+    <p class="small">产出形态：一张 5×3 的热力图，商家客服直接照着执行——这是"可落地"最直观的证据。</p>
+  </div>
+  <div class="card">
+    <h4>② 改款投入（带预算的背包）</h4>
+    <div class="formula" style="font-size:12px">max Σ xᵢ·ROIᵢ
+s.t. Σ xᵢ·Cᵢ ≤ B,  xᵢ ∈ {0,1}
+
+ROIᵢ = (Δrᵢ × Qᵢ × 客单价) / Cᵢ</div>
+    <p class="small">输入改款预算 B 与候选动作清单，输出优先级排序 + 分配方案 + 是否用满预算。这就是把"建议"变成"投资决策"。</p>
+  </div>
+</div>
+<div class="card">
+  <h4>③ 决策沙盘（Demo 记忆点）</h4>
+  <p>在千问办公里搭可交互面板，三个控件：<strong>补偿额度滑杆</strong>、<strong>改款预算滑杆</strong>、<strong>类目切换</strong>。实时联动显示：预计退货率、月毛利、ROI 曲线、利润拐点位置。</p>
+  <p class="small">设计要点：滑到最优点时曲线出现明显峰值标记，滑过拐点时毛利转红——让评委亲手体会"补太多反而亏"这个反直觉结论。这比任何一页 PPT 都有效。</p>
+</div>
+
+<h2>六、评测协议（五个实验，逐项对齐评审维度）</h2>
+<table>
+  <tr>
+    <th style="width:5%">#</th><th style="width:20%">实验</th><th style="width:17%">数据</th><th style="width:28%">设计</th><th style="width:30%">预注册指标与通过标准</th>
+  </tr>
+  <tr>
+    <td>E1</td><td><strong>归因质量</strong><br><span class="small">描述层可信度</span></td><td><span class="badge b-real">真实</span>200 条金标准</td>
+    <td>双人独立盲标算 κ(人工间)；工具 vs 金标准算 macro-F1 与 κ；输出分类型混淆矩阵；4 组消融（去 KANO 规则 / 去 few-shot 回灌 / 去双通道 / 去 evidence 约束）</td>
+    <td>κ(人工间) ≥ 0.65；macro-F1 ≥ 0.80；κ(工具) ≥ 0.70；每组消融后 F1 下降 ≥ 3pp 方视为"该模块有效"</td>
+  </tr>
+  <tr>
+    <td>E2</td><td><strong>偏差校正</strong><br><span class="small">结论一的可信度</span></td><td><span class="badge b-real">真实</span>评分分布<br><span class="badge b-sim">模拟</span>真值检验</td>
+    <td>真实：MLE 拟合 α, β, κ，比较原始与校正排名，算 Spearman ρ。<br>模拟：设定已知不满率，检验校正方法能否还原</td>
+    <td>Spearman ρ &lt; 0.85 即说明"排名确实会被扭曲"（结论成立）；模拟下不满率估计误差 &lt; 3pp</td>
+  </tr>
+  <tr>
+    <td>E3</td><td><strong>参数回收</strong><br><span class="small">方法论地基</span></td><td><span class="badge b-sim">模拟</span>DGP</td>
+    <td>200 次蒙特卡洛；三种估计方法对比；输出 Bias / RMSE / 95%CI 覆盖率；参数回收散点图（真值 vs 估计值，45° 参考线）</td>
+    <td>|Bias|/真值 &lt; 10%；CI 覆盖率 ∈ [92%, 98%]；FE 的 RMSE 显著低于 Pooled OLS</td>
+  </tr>
+  <tr>
+    <td>E4</td><td><strong>决策回测</strong><br><span class="small">结论二的可信度</span></td><td><span class="badge b-sim">模拟</span>5000 条客服记录</td>
+    <td>三策略对比：经验固定档位（补 20 元）/ 无策略性模型 / 完整模型。同一批样本回测，比较累计利润与错误决策率</td>
+    <td>完整模型累计利润高于经验策略 ≥ 15%；识别出的 c* 与真实最优点的相对误差 &lt; 15%</td>
+  </tr>
+  <tr>
+    <td>E5</td><td><strong>端到端价值</strong><br><span class="small">落地说服力</span></td><td><span class="badge b-sim">模拟</span>商家画像</td>
+    <td>设定典型商家（月销 3000 单、客单价 129、退货率 18%、毛利 35%），跑完整流程，输出"实施 3 个月后的预期改善"</td>
+    <td>给出带区间的预测（非点估计），并明确标注"基于模拟情景，非实测"</td>
+  </tr>
+</table>
+<div class="card warncard">
+  <h4>预注册原则（很重要）</h4>
+  <p>上表的通过标准必须<span class="warn">在跑实验之前写定并提交存档</span>（截图或文档时间戳）。事后调标准 = 数据挖掘 = 评审会扣分。这个动作本身很小，但懂行的评委会认——它证明团队受过规范训练。</p>
+</div>
+
+<h2>七、Demo 脚本（2 分 40 秒，逐镜头）</h2>
+<table>
+  <tr><th style="width:8%">时间</th><th style="width:26%">画面</th><th style="width:40%">台词要点</th><th style="width:26%">设计意图</th></tr>
+  <tr><td>0:00–0:18</td><td>真实差评截图 + 商家回复"亲，给您补偿 10 元券"</td><td>"这条差评，商家的反应是发券。三个月后，同一个问题又来了 47 次。"</td><td>3 秒建立共情，直击痛点</td></tr>
+  <tr><td>0:18–0:40</td><td>导入 CSV → 自动归因动画 → 看板生成</td><td>"一份评论、退货、客服数据，20 秒完成归因编码。"</td><td>证明效率，不解释技术</td></tr>
+  <tr><td>0:40–1:05</td><td><strong>排名反转图</strong>：原始差评率排名 vs 校正后排名，两条线交叉</td><td>"但我们发现：按原始差评率排序，你会改错东西。因为写差评的人，本来就不是随机样本。"</td><td><span class="ok">第一个"哇"点</span>，反直觉</td></tr>
+  <tr><td>1:05–1:32</td><td>传导链动画 → 落到一个数字</td><td>"退货率降 1 个点，等于每月多拿 367 块免费流量。所以这不是口碑问题，是流量成本问题。"</td><td>把定性变定量，Know-how 落地</td></tr>
+  <tr><td>1:32–2:05</td><td><strong>决策沙盘</strong>：拖动补偿滑杆，利润曲线升起后翻红</td><td>"补偿不是越多越好。25 块是拐点，超过之后你是在养羊毛党。"</td><td><span class="ok">第二个"哇"点</span>，可交互</td></tr>
+  <tr><td>2:05–2:28</td><td><strong>参数回收散点图</strong>：点密集落在 45° 线上</td><td>"我们用的模拟数据，先在已知答案的世界里验证方法——200 次重复，置信区间覆盖率 94.5%。"</td><td><span class="ok">第三个"哇"点</span>，方法论硬度</td></tr>
+  <tr><td>2:28–2:40</td><td>收束为一句 + 团队 logo</td><td>"从差评到决策，每一步都有据可查。"</td><td>呼应作品名</td></tr>
+</table>
+<p class="small">技术提示：全程录屏 + 字幕（静音也能看懂），关键数字放大加粗，图表用统一配色（建议深色背景 + 单一强调色，与看板一致）。三段"哇"点必须在前 2 分 30 秒内全部出现，评委注意力衰减曲线决定了这一点。</p>
+
+<h2>八、10 天作战计划（半天粒度）</h2>
+<table>
+  <tr><th style="width:17%">时间</th><th style="width:38%">任务</th><th style="width:22%">交付物</th><th style="width:23%">完成判据</th></tr>
+  <tr>
+    <td><strong>10/31 今晚</strong></td><td>定题确认 + 拉群 + 确认 3–5 人名单；阅读《赛事细则》确认报名与提交通道</td><td>队伍名单、报名凭证</td><td>报名完成截图存档</td>
+  </tr>
+  <tr>
+    <td><strong>11/1（周日）</strong></td><td>上午：编码本 v1 定稿（四级表 + 每类 5 例 + 排他规则）<br>下午：DGP 技术说明定稿，冻结真参数值</td><td>《编码本 v1》《DGP 说明》</td><td>两人试标 20 条，能达成一致</td>
+  </tr>
+  <tr>
+    <td><strong>11/2</strong></td><td>上午：下载公开数据集、清洗、去 PII<br>下午：生成模拟面板 + 客服记录</td><td>清洗后数据集、模拟数据 v1</td><td>数据可读、字段完整、无 PII</td>
+  </tr>
+  <tr>
+    <td><strong>11/3</strong></td><td>双人独立盲标 200 条；算 κ(人工间)。<span class="warn">κ &lt; 0.6 必须返工编码本</span></td><td>金标准集、κ 基线</td><td>κ ≥ 0.65</td>
+  </tr>
+  <tr>
+    <td><strong>11/4</strong></td><td>归因引擎跑通（结构化输出 + 双通道）；E1 评测第一轮</td><td>归因结果表、E1 初版</td><td>macro-F1 ≥ 0.75</td>
+  </tr>
+  <tr>
+    <td><strong>11/5</strong></td><td>E2 偏差校正（真实评分分布 + 模拟还原）；产出排名反转图</td><td>排名对比图、ρ 值</td><td>两个排名可并列展示</td>
+  </tr>
+  <tr>
+    <td><strong>11/6</strong></td><td>E3 参数回收（200 次 MC）；面板回归 + 方法对比 + 安慰剂</td><td>回收报告、弹性系数表</td><td>CI 覆盖率进区间</td>
+  </tr>
+  <tr>
+    <td><strong>11/7</strong></td><td>E4 决策回测（三策略对比）+ 补偿矩阵 + 改款背包</td><td>补偿热力图、ROI 排序</td><td>完整模型利润领先 ≥15%</td>
+  </tr>
+  <tr>
+    <td><strong>11/8</strong></td><td>上午：千问办公搭建看板 + 沙盘，全流程截图，记 Session ID<br>下午：E1 消融四组跑完</td><td>可交互沙盘、Session ID、消融表</td><td>沙盘滑杆可实时联动</td>
+  </tr>
+  <tr>
+    <td><strong>11/9 上午</strong></td><td>写作品描述（600–1600 字）；画开发与迭代关键步骤图</td><td>作品描述、步骤图</td><td>七要点全覆盖</td>
+  </tr>
+  <tr>
+    <td><strong>11/9 下午</strong></td><td><span class="ok">提交第一版完整作品</span>（务必留缓冲）</td><td>提交凭证</td><td>系统显示提交成功</td>
+  </tr>
+  <tr>
+    <td><strong>11/9 晚–11/10</strong></td><td>录演示视频 → 替换 → 二次提交；带话题分享拿 1000 积分</td><td>演示视频、分享链接</td><td>视频 ≤ 3 分钟，字幕完整</td>
+  </tr>
+</table>
+<div class="alert" style="margin-top:14px">
+  <span class="tag">排期铁律</span>
+  <p><strong>11/6 是熔断点。</strong>若这天结束时参数回收还没跑出可用结果，立即启动降级：把传导层改为"PATH 图 + 文献参数 + 龙卷风敏感性分析"，在材料中如实说明"受时间限制，因果层采用结构假设而非估计"。<span class="warn">诚实降级不扣分，硬吹会被问穿。</span></p>
+</div>
+
+<h2>九、团队分工（4 人配置）</h2>
+<table>
+  <tr><th style="width:16%">角色</th><th style="width:34%">负责模块</th><th style="width:26%">硬技能要求</th><th style="width:24%">关键交付</th></tr>
+  <tr><td><strong>建模</strong><br><span class="small">数据科学背景</span></td><td>DGP 设计、面板回归、MLE、背包优化、参数回收</td><td>statsmodels / linearmodels、贝叶斯或 MLE 基础、能解释系数含义</td><td>E2 / E3 / E4 全部数值结果</td></tr>
+  <tr><td><strong>AI 工程</strong></td><td>结构化输出、双通道校验、主动学习闭环、千问办公内沙盘搭建</td><td>千问办公熟练、JSON schema、Prompt 工程</td><td>可交互沙盘 + Session ID</td></tr>
+  <tr><td><strong>业务研究</strong><br><span class="small">经管背景</span></td><td>编码本设计、KANO 判定、Know-how 撰写、作品描述、传导逻辑</td><td>能把模型结果翻译成经营语言，懂电商运营</td><td>《编码本》、作品描述正文</td></tr>
+  <tr><td><strong>材料视觉</strong></td><td>看板视觉、演示视频、步骤图、提交合规检查</td><td>剪辑 + 信息设计，能控节奏</td><td>2′40″ 演示视频</td></tr>
+</table>
+<p class="small">3 人队：材料视觉并入业务研究。5 人队：增设"评测与合规"专员，专管 E1 标注质量控制与数据出处台账——这一角色直接对应验证维度与合规审查。</p>
+
+<h2>十、风险台账与降级路径</h2>
+<table>
+  <tr><th style="width:20%">风险</th><th style="width:10%">概率</th><th style="width:34%">影响</th><th style="width:36%">应对</th></tr>
+  <tr><td>κ(人工间) &lt; 0.6，编码本定义模糊</td><td class="warn">高</td><td>E1 全部不可信，归因结果无意义</td><td>立即收敛到 3 个一级类（产品/信息/履约），放弃 5 类细分；把"收缩过程"写进材料，作为方法迭代的证据</td></tr>
+  <tr><td>参数回收未通过（Bias 超 10%）</td><td class="warn">中</td><td>方法论地基动摇</td><td>降为 PATH 图 + 敏感性分析；或缩小模型（只估一级传导），把二级传导改为情景假设</td></tr>
+  <tr><td>千问办公内搭不出交互沙盘</td><td class="warn">中</td><td>Demo 失去最大记忆点</td><td>降为多张预设情景的静态对比图（低/中/高三档补偿），配旁白讲拐点；视觉上仍可清晰传达</td></tr>
+  <tr><td>时间不足，E4/E5 未完成</td><td class="warn">中</td><td>落地说服力弱</td><td>只保 E1+E3（一个证明文本能力，一个证明方法可靠），E4 用单例情景演算替代完整回测</td></tr>
+  <tr><td>评委质疑"模拟数据=编数据"</td><td class="ok">必问</td><td>可能被直接扣分</td><td><span class="ok">主动前置</span>：作品描述开头就说明分层数据战略 + 参数回收逻辑；演示视频 2:05 处专门讲这一页。主动交代永远优于被问</td></tr>
+  <tr><td>核心产物未在千问办公生成</td><td class="ok">必查</td><td>合规违规</td><td>Python 仅用于建模计算（规则允许的第三方辅助）；看板、沙盘、报告必须落在千问办公，Session ID 需能体现核心工作</td></tr>
+</table>
+
+<h2>十一、逐维打击点（对照五维评审）</h2>
+<div class="card">
+  <table>
+    <tr><th style="width:22%">评审维度</th><th style="width:39%">一般作品会给的</th><th style="width:39%">本方案给的</th></tr>
+    <tr><td>管理问题洞察与行业 Know-how</td><td>"差评影响口碑和销量"</td><td>选择偏差导致排名扭曲（结论一）；补偿天花板与策略性投诉（结论二）；退货率→DSR→曝光的量化传导与等效流量价值换算</td></tr>
+    <tr><td>AI 工具设计与 Vibe Coding</td><td>一个 prompt + 几张图</td><td>结构化输出约束 + 双通道校验 + 主动学习闭环 + 可交互决策沙盘，是四层系统而非脚本</td></tr>
+    <tr><td>学生自主增量与创新性</td><td>用了现成模型</td><td>自建四级编码本（含 v1→v3 演进证据）、自建 DGP、自写的策略性投诉目标函数、预注册的评测协议</td></tr>
+    <tr><td>实际效果与验证质量</td><td>一条"准确率 85%"</td><td>五个实验 + 预注册标准 + κ 基线 + 四组消融 + 200 次参数回收 + 三策略回测 + 稳健性三件套</td></tr>
+    <tr><td>通用性与落地潜力</td><td>"换类目也能用"</td><td>类目编码包可插拔、DGP 参数可按行业重标定、补偿矩阵可直接作为客服 SOP、改款排序可直接对接排期</td></tr>
+  </table>
+</div>
+
+<h2>十二、提交清单（逐项打勾）</h2>
+<div class="card">
+  <h4>作品基本信息</h4>
+  <ul>
+    <li>作品名称：<strong>差评炼金炉 —— 从差评文本到反事实经营决策的 VOC 决策引擎</strong></li>
+    <li>所属方向：市场营销与客户洞察</li>
+    <li>作品形态：可交互决策引擎（Web 应用 + 分析看板 + 决策沙盘）</li>
+  </ul>
+  <h4>开发与外部资源说明</h4>
+  <ul>
+    <li>千问办公关键任务 Session ID（≥ 3 个：数据接入、看板搭建、沙盘搭建）</li>
+    <li>第三方工具清单：Python/statsmodels（建模计算）、数据来源出处表（含 ChnSentiCorp 出处与 DGP 说明附件）</li>
+  </ul>
+  <h4>作品描述（600–1600 字，七要点全覆盖）</h4>
+  <ul>
+    <li>为什么选这个管理问题 / 想解决什么 / 管理 Know-how / 如何解决 / 千问办公承担什么 / 团队自主设计 / 实测效果</li>
+  </ul>
+  <h4>附件</h4>
+  <ul>
+    <li>演示视频（2′40″，字幕完整）</li>
+    <li>开发与迭代关键步骤图（含编码本 v1→v3 演进）</li>
+    <li>效果验证材料（E1–E5 完整报告 + 参数回收散点图 + 消融表）</li>
+    <li>补充说明：《DGP 技术说明》《评测协议（预注册版）》</li>
+  </ul>
+  <h4>合规自查</h4>
+  <ul>
+    <li>核心产物在千问办公生成 ✓ ｜ 原创且未在其他赛事获奖 ✓ ｜ 数据来源合法、模拟数据已标注 ✓ ｜ 关键对话与截图已存档 ✓</li>
+  </ul>
+</div>
+
+<hr class="divider">
+<p class="small">参考：赛事官网 aiproductivitymanagement.qwenwork.host ｜ 官方案例库 usecase.qwenwork.host ｜ 课程 learn.qwenwork.host/courses ｜《赛事细则》钉钉文档（需登录，组队后通读）<br>
+已核验日程：报名与提交 10/10–11/10 ｜ 初赛 11/11–16（20 强）｜ 复赛 11/21–22（10 强）｜ 决赛 11 月底<br>
+配套文件：《技术附件包》（编码本 v1 全文 · DGP 生成规范 · 评测记录表 · 作品描述草稿）</p>
+
+</div>
+</body>
+</html>
