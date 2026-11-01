@@ -1040,7 +1040,18 @@ class Agent:
             state['user_reason_text'] = _extract_reason_phrase(q, _reason) or _reason
             # 知识库要的是原词，不是归一化名：别名表里有"吊牌价格牌印错"
             # 这种长说法，归一化会把它抹成大类，动作也跟着变泛。
-            state['kb_query'] = q
+            #
+            # 【但"原词"不等于"整句问题"】
+            # 这里原来写的是 state['kb_query'] = q，把整句话传了下去：
+            #   「标签脱落这个问题该怎么解决」→ cause=标签脱落这个问题该怎么解决
+            # 工具侧靠"别名 in q"仍然能命中，所以答案是对的、测试也全过，
+            # 但界面上推理链第一格显示的就是那句完整的话——
+            # 用户看到的是"系统把我的问题整句塞进了一个叫 cause 的参数里"。
+            # 这个 bug 只有截图能发现：参数、答案、断言全是"正确"的。
+            #
+            # 改传 _extract_reason_phrase 的产物：它从问句里抠出用户的实际说法
+            # （"标签脱落"），既保留了原词的颗粒度，又去掉了"这个问题怎么解决"的尾巴。
+            state['kb_query'] = (state['user_reason_text'] or _reason)
             # 标记这个原因在数据里到底有没有
             state['facts']['reason_in_data'] = is_data_reason(_reason)
             if not is_data_reason(_reason):
