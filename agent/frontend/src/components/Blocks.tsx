@@ -1,4 +1,6 @@
-import type { Block, DecompBlock, KpiItem } from '../lib/types'
+import type {
+  Block, ContrastBlock, DecompBlock, KpiItem, PersonaBlock, WordCloudBlock,
+} from '../lib/types'
 
 /** 回答主体：按 block.type 分派渲染。
  *
@@ -30,6 +32,13 @@ export function Blocks({ blocks }: { blocks: Block[] }) {
             return <Curve key={i} block={b} />
           case 'trend':
             return <Trend key={i} block={b} />
+          /* ---- v3.1 评论分析四件套 ---- */
+          case 'wordcloud':
+            return <WordCloud key={i} block={b as unknown as WordCloudBlock} />
+          case 'persona':
+            return <Persona key={i} block={b as unknown as PersonaBlock} />
+          case 'contrast':
+            return <Contrast key={i} block={b as unknown as ContrastBlock} />
           default:
             return null
         }
@@ -617,4 +626,272 @@ function markNum(s: string): string {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/(-?\d[\d,]*\.?\d*%|-?¥[\d,]+\.?\d*|-?\b\d[\d,]*\.\d+\b)/g, '<b>$1</b>')
+}
+
+/* ==================================================================
+ * v3.1 评论分析四件套的展示块
+ *
+ * 【这三个组件共同要解决的一件事：让数字可以被反驳】
+ * 情感占比、高频词、用户画像、竞品差距，本质上都是"我对一堆文本
+ * 做了一次判断"。如果界面上只出现结论，读者无从验证，只能选择信
+ * 或不信。所以每个数字旁边都必须能摸到它的原材料：
+ *   · 词云 → 每个词挂一句包含它的原话
+ *   · 画像 → 每条结论挂一句命中信号的原话
+ *   · 对比 → 两侧的词都标出它在各自语料里的出现次数
+ * 这不是"多给点信息"，是让结论可被证伪。
+ * ================================================================== */
+
+/* ------------------------------------------------------------ 词云 */
+/** 词云块。
+ *
+ * 【为什么是"条形 + 悬停原句"而不是经典的随机字号布局】
+ * 随机布局的词云看起来漂亮，但它有一个致命缺陷：位置和大小都不
+ * 对应任何可读的量，读者只能看出"哪个大"，看不出"大多少"，
+ * 也看不出排序。而这里要回答的是"抱怨点什么最突出"，
+ * 需要一个能排队的结构。横向条形天然带顺序，还能同时挂频次和 lift。
+ *
+ * 【为什么要显示 lift 而不是只显示次数】
+ * 因为次数会骗人。差评里"苹果"出现 182 次远多于"发霉"的 7 次，
+ * 但"苹果"是商品名，在好评里也一样多——它对"抱怨什么"零信息量。
+ * lift 就是"这个词在差评里比在好评里常见多少倍"，
+ * 商品名 lift≈0 会自动沉底。所以次数和 lift 必须同时显示，
+ * 让读者自己看出这两件事不是一回事。
+ */
+function WordCloud({ block }: { block: WordCloudBlock }) {
+  const items = block.items ?? []
+  if (!items.length) return null
+
+  const isLift = block.rank_by === 'lift'
+  // 归一化用最大值，让第一名的条占满，其余按比例。
+  // 【不用对数刻度】词频本身跨度大，对数会让"17 次"和"7 次"
+  // 看起来差不多长——而这两个词的证据强度差一倍多，
+  // 视觉上不该抹平。
+  const maxCount = Math.max(...items.map((i) => i.count), 1)
+
+  return (
+    <Card
+      title={block.title}
+      note={[
+        block.rank_note,
+        block.compare_n
+          ? `对照组 ${block.compare_n.toLocaleString()} 条反向评论；lift = log2(本类出现率 ÷ 对照出现率)`
+          : '',
+      ].filter(Boolean).join(' · ')}
+    >
+      <div style={{ display: 'grid', gap: 1 }}>
+        {items.map((it, i) => (
+          <div className="wc-row" key={i} title={it.quote || '（该词没有可回溯的原句）'}>
+            <div className="wc-word">{it.word}</div>
+
+            <div className="wc-track">
+              <div
+                className="wc-fill"
+                style={{ width: `${Math.max((it.count / maxCount) * 100, 3)}%` }}
+              />
+            </div>
+
+            <div className="wc-n">{it.count}</div>
+
+            {/* 【lift 一栏在没有对照组时不显示，而不是显示 0】
+                显示 0 会被读成"这个词的区分度是零"，
+                而实际含义是"这次没算区分度"。两者完全不同。 */}
+            {isLift && (
+              <div
+                className="wc-lift"
+                title={`差评里比好评里常见 ${Math.pow(2, it.lift ?? 0).toFixed(1)} 倍`}
+              >
+                {it.lift != null ? `${it.lift > 0 ? '+' : ''}${it.lift.toFixed(1)}` : '—'}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* 【原句单独列一条，不挤在行内】
+          行内放不下 60 个字，而一句真实评论常常超过这个长度；
+          强行截断就会把命中词切掉（这个 bug 在后端已经修过一次）。
+          这里选第一条最突出的词做样例，其余靠 title 悬停看。 */}
+      {items[0]?.quote && (
+        <div className="wc-sample">
+          <span className="wc-sample-k">原话 · {items[0].word}</span>
+          <span className="wc-sample-t">{items[0].quote}</span>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/* ------------------------------------------------------------ 画像 */
+/** 用户画像块。
+ *
+ * 【这个组件最重要的职责不是"展示画像"，是"防止画像被当成人群标签"】
+ * 后端返回的 cannot 数组写明了"评论里没有年龄性别收入，回答不了这些"。
+ * 如果界面上只渲染那些 20% 的百分比，读者一定会把它读成
+ * "我的用户 15.8% 是品质优先型人群"——那是编的。
+ * 所以 cannot 必须显示在画像块**内部**，而且要用中性但显眼的方式，
+ * 不能塞进脚注、不能折叠、不能放到 caveats 里（那里用户不看）。
+ */
+function Persona({ block }: { block: PersonaBlock }) {
+  const groups = block.groups ?? []
+  const cannot = block.cannot ?? []
+  if (!groups.length) return null
+
+  // 每组内按条数降序，让"最强的信号"永远在最上面。
+  // 后端已经排过，这里再排一次是为了防止将来后端改口径后
+  // 前端出现"看着乱"的组——排序是展示层的底线，不该完全依赖上游。
+  const sorted = groups.map((g) => ({
+    ...g,
+    items: [...(g.items ?? [])].sort((a, b) => b.n - a.n),
+  }))
+  const maxN = Math.max(...sorted.flatMap((g) => g.items.map((i) => i.n)), 1)
+
+  return (
+    <Card title={block.title}>
+      <div style={{ display: 'grid', gap: 14 }}>
+        {sorted.map((g, gi) => (
+          <div key={gi}>
+            <div className="ps-head">
+              <span className="ps-group">{g.group}</span>
+              {g.desc && <span className="ps-desc">{g.desc}</span>}
+            </div>
+
+            <div style={{ display: 'grid', gap: 7, marginTop: 7 }}>
+              {g.items.map((it, i) => (
+                <div className="ps-item" key={i}>
+                  <div className="ps-top">
+                    <span className="ps-sig">{it.signal}</span>
+                    <span className="ps-bar">
+                      <i style={{ width: `${Math.max((it.n / maxN) * 100, 2)}%` }} />
+                    </span>
+                    <span className="ps-n">
+                      {it.n.toLocaleString()}
+                      <small>{(it.pct * 100).toFixed(1)}%</small>
+                    </span>
+                  </div>
+
+                  {/* 【原话必须标出它是被哪个词命中的】
+                      画像模块出过最严重的一个 bug 就是"原话和信号对不上"——
+                      挂的原话里根本没有那个信号词。加了 matched 之后，
+                      读者可以自己核对：句中高亮的词就是判定依据。
+                      这比任何"我们做了校验"的说明都可信。 */}
+                  {it.quote && (
+                    <div className="ps-quote">
+                      <Higlight text={it.quote} hit={it.matched} />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 【"回答不了什么"放在画像块内部，不放进 caveats】
+          放 caveats 等于没写：那是页面底部的折叠区，用户读到画像时
+          已经形成印象了。这个清单的作用是**在印象形成的同时**拦住误读。 */}
+      {cannot.length > 0 && (
+        <div className="ps-cannot">
+          <div className="ps-cannot-h">这份画像回答不了的事</div>
+          <ul>
+            {cannot.map((c, i) => <li key={i}>{c}</li>)}
+          </ul>
+        </div>
+      )}
+    </Card>
+  )
+}
+
+/** 把句子里命中信号的那个词标出来。
+ *
+ * 【为什么要做这件事，而不是整句原样显示】
+ * 画像结论的可信度全在"这句话确实说了这件事"。
+ * 如果只是把一句话贴在结论下面，读者还得自己去句子里找证据——
+ * 多数人不会找，会直接默认它成立。
+ * 标出来以后，读者一眼能看出"哦，是因为它提到了『囤货』"，
+ * 也能立刻发现"这句话里根本没有那个词"（如果真的错挂的话）。
+ */
+function Higlight({ text, hit }: { text: string; hit?: string }) {
+  if (!hit) return <>{text}</>
+  const i = text.indexOf(hit)
+  if (i < 0) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, i)}
+      <em className="ps-hit">{hit}</em>
+      {text.slice(i + hit.length)}
+    </>
+  )
+}
+
+/* ------------------------------------------------------------ 用词差异 */
+/** 本店 vs 对标的用词差异。
+ *
+ * 【为什么要做成左右对照，而不是一张"本店独有词"排行】
+ * 单独列"本店独有词"会诱导一个错误结论：这些词就是我们的特色。
+ * 但"独有"可能只是因为对标卖的是别的东西（选品差异），
+ * 不是经营差异。左右并排能让读者立刻看到两边各自在说什么，
+ * 从而自己判断"这是不是同一个话题下的差别"。
+ *
+ * 所以块头必须显示 compare_scope（"数码类目内"），
+ * 那是这个对比成立的唯一前提。
+ */
+function Contrast({ block }: { block: ContrastBlock }) {
+  const ours = block.ours ?? []
+  const theirs = block.theirs ?? []
+  if (!ours.length && !theirs.length) return null
+
+  const maxLr = Math.max(
+    ...ours.map((x) => Math.abs(x.lr)),
+    ...theirs.map((x) => Math.abs(x.lr)),
+    0.1,
+  )
+
+  return (
+    <Card
+      title={block.title}
+      note={block.scope ? `对比范围：${block.scope}。不在同一类目内比较时，差异反映的是选品不同，不是经营差异。` : undefined}
+    >
+      <div className="ct-grid">
+        <Side
+          label={`本店更常说`}
+          tone="ours"
+          items={ours}
+          maxLr={maxLr}
+        />
+        <Side
+          label={`${block.benchmark || '对标'}更常说`}
+          tone="theirs"
+          items={theirs}
+          maxLr={maxLr}
+        />
+      </div>
+    </Card>
+  )
+}
+
+function Side({
+  label, tone, items, maxLr,
+}: {
+  label: string
+  tone: 'ours' | 'theirs'
+  items: { word: string; n: number; lr: number }[]
+  maxLr: number
+}) {
+  return (
+    <div className={`ct-side ${tone}`}>
+      <div className="ct-h">{label}</div>
+      <div style={{ display: 'grid', gap: 4 }}>
+        {items.map((x, i) => (
+          <div className="ct-row" key={i} title={`在${tone === 'ours' ? '本店' : '对标'}语料中 ${x.n} 次`}>
+            <span className="ct-w">{x.word}</span>
+            <span className="ct-bar">
+              <i style={{ width: `${Math.max((Math.abs(x.lr) / maxLr) * 100, 4)}%` }} />
+            </span>
+            <span className="ct-n">{x.n}</span>
+          </div>
+        ))}
+        {items.length === 0 && <div className="tiny muted">没有显著独有的词</div>}
+      </div>
+    </div>
+  )
 }

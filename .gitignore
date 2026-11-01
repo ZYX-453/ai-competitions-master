@@ -92,6 +92,33 @@ llm_last_raw.json
 _tmp/shots/
 screenshots_tmp/
 
+# 【评论分析模块的截图产物】
+# outputs/review_blocks/ 里是 8 张 3.3MB 的过程截图，
+# README 一张都没引用（正式文档用的是 outputs/ 下那几份 html）。
+# 它们跟 _tmp/shots/ 是同一类东西：我用来核对渲染效果的，
+# 不是给人看的交付物。留在仓库里只会让 clone 变慢。
+outputs/review_blocks/
+
+# ---------------- 评论语料的真值文件 ----------------
+# 【这一条是数据隔离的底线，不是"瘦身"】
+# data/review_pool/_corpus_truth.csv 有 label / cause_l1 / cause_l2 三列，
+# 是情感判定和原因归类的**答案**。
+# corpus.csv 里物理上没有这三列（这也是 check_review_analytics 第 1 节的断言），
+# 但真值文件就躺在同一个目录下——一旦它进了仓库，
+# 任何人 clone 下来都会先看到答案，整套"从文本自己推结论"的论证就废了。
+#
+# 所以这里逐条列出，而不是写一个宽泛的 *_truth.csv：
+# 太宽的规则会顺手吃掉 data/processed/ 下那些**应该**进仓库的校验文件
+# （_verification.json、gold_standard_200.csv 都在那边）。
+data/review_pool/_corpus_truth.csv
+# 同一个坑的第二个文件：竞品语料的 truth_bucket 列（POS/NEG/NEU）。
+# 它躺在 data/processed/ 里，而那个目录整体是"要进仓库"的——
+# 如果只按目录判断就会漏掉它。名字带下划线前缀不是约定，是提示：
+# processed 下凡是 _ 开头的都是"校验用的中间答案"，不是分析输入。
+data/processed/_competitor_truth.csv
+# 当前用不到：分析永远只读 corpus.csv，真值只在 check 脚本里按需读
+# 如果哪天要对外发布真值样本，单独放一个明确的目录，不要解开这条。
+
 # ---------------- 密钥与配置 ----------------
 # 【绝对不能进仓库】
 # 这个项目用 CANYU_LLM_KEY 环境变量读 API Key，

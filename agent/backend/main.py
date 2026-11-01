@@ -123,6 +123,17 @@ def meta():
             {'label': '补多少钱最划算', 'question': '客服补偿补多少最划算'},
             {'label': '服饰类目怎么回事', 'question': '服饰类目这周退货为什么涨了'},
             {'label': '给我一套可执行方案', 'question': '第44周退货率涨了，我该怎么办'},
+            # ---- v3.1 评论分析四件套 ----
+            # 【这四条为什么必须放进 suggestions】
+            # 新能力如果只写在 README 里，演示时没有任何人会去点——
+            # 首页能点的按钮就是这套系统"会做什么"的全部声明。
+            # 四条分别对应情感 / 词云 / 画像 / 竞品，
+            # 覆盖了四个模块各自最有代表性的问法。
+            {'label': '评论情感怎么样', 'question': '帮我分析一下评论的情感'},
+            {'label': '差评都在说什么', 'question': '差评都在说什么'},
+            {'label': '用户画像是什么样', 'question': '用户画像是什么样的'},
+            {'label': '和竞品比怎么样', 'question': '我们和竞品比怎么样'},
+            {'label': '数据是怎么来的', 'question': '你的评论数据是从哪来的'},
         ],
     }
 
@@ -160,6 +171,84 @@ async def chat(req: ChatRequest):
             'X-Accel-Buffering': 'no',   # nginx 下禁用缓冲
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# 采集器：数据是怎么进来的
+# ---------------------------------------------------------------------------
+
+@app.get('/api/collectors')
+def collectors():
+    """采集渠道清单。
+
+    【这个端点存在的理由，不是为了"多一个 API"】
+    演示时最容易被追问的一句是"你的评论数据哪来的"。如果答案只能是
+    "我编的"，整套分析的可信度就没了。所以把采集链路本身做成可查的：
+    每个渠道说明自动化程度、要不要平台资质、以及——哪个明确不做、为什么。
+
+    【为什么把"不做"也列出来】
+    只列能做的，等于暗示"平台页面抓取只是还没做"。
+    实际是决定不做，理由写在 collectors.py 的模块头里。
+    这两件事在汇报里必须分清：一个是 backlog，一个是 design decision。
+    """
+    from tools import collectors as col
+    lst = col.list_collectors()
+    return {
+        'total': len(lst),
+        'auto': sum(1 for c in lst if c['auto'] and c['available']),
+        'items': [{
+            'name': c['name'],
+            'title': c['title'],
+            'auto': bool(c['auto']),
+            'compliance': c['compliance'],
+            'available': bool(c['available']),
+            # 每个渠道都说清"这一步要人做什么"。
+            # 只有布尔值的话，"半自动"到底半在哪，看的人只能猜。
+            'needs_human': c.get('needs_human', ''),
+            'note': c.get('note', ''),
+        } for c in lst],
+        'policy': ('平台页面抓取不实现：违反服务条款、反爬对抗导致代码寿命以周计、'
+                   '平台只展示前 N 页使样本天然有偏。替代方案是'
+                   '「平台后台导出 → inbox → 自动导入」，'
+                   '把人的登录态留在人手里。'),
+    }
+
+
+@app.post('/api/collectors/scan')
+def collectors_scan():
+    """扫一遍 inbox，报告"现在有几个文件待导入、能补进来多少条"。
+
+    【为什么用 dry 模式，不直接导入】
+    导入是写操作：会往 corpus.csv 追加行、会移动 inbox 里的文件。
+    一个 GET 风格的信息查询不该有副作用——否则任何人刷一下这个 URL
+    就把数据改了，而且没人知道是谁触发的。
+    真要导入，走命令行 `python -m tools.collectors --run imported`，
+    那是一条有明确发起人、有日志的动作。
+    """
+    from tools import collectors as col
+    try:
+        # 【用 run(write=False) 而不是构造什么 dry 参数】
+        # BaseCollector.run 本来就留了 write 开关：
+        # write=False 时它走到校验为止，然后返回 added=len(df) 就停，
+        # 不调 _merge_into_corpus、不写 manifest、不移动 inbox 文件。
+        # 这是这个模块里唯一一处"预演"能力，别在外面重新发明一遍。
+        r = col.run_collector('imported', write=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'{type(e).__name__}: {e}')
+
+    return {
+        'ok': True,
+        'dry': True,
+        'collector': r.collector,
+        'ok_run': bool(r.ok),
+        # 【added 在预演时含义变了】
+        # 写模式下它是"真正落库的条数"，预演时是"如果导入会落多少条"。
+        # 前端必须知道这个区别，否则会以为已经导进去了。
+        'would_add': int(getattr(r, 'added', 0) or 0),
+        'errors': list(getattr(r, 'errors', []) or []),
+        'detail': getattr(r, 'detail', {}) or {},
+        'note': '这是预演：只统计能导入多少条，没有写入 corpus、没有移动 inbox 文件。',
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -237,8 +326,194 @@ async def eval_run():
 
 
 # ---------------------------------------------------------------------------
+# 功能页面端点
+# ---------------------------------------------------------------------------
+#
+# 【为什么要有一整组 /api/pages/*，而不是让前端各取所需拼】
+#
+# 页面要用到的每个数字都必须能追回到 data/processed/*.csv 的某一行。
+# 一旦前端自己乘 100、自己求和，它就变成了第二套数据源。
+# 这套系统已经为此付过代价：左栏"年订单 64.7k / 退货率 14.6%"
+# 是写死在前端 JSX 里的，数据重建之后没人记得改，
+# 于是每一屏都在展示一个三个版本之前的数字。
+#
+# 所以这一组端点的分工是死的：
+#   · 后端算完，连百分号都算好（传 17.04 而不是 0.1704）
+#   · 前端只排版，不许出现任何换算
+#
+# 【为什么它们不走 Agent】
+# 问答要"按需深入"，由 Agent 决定查什么；
+# 页面要"一屏看全"，固定查一组，不做动态决策。
+# 两条路径共用同一批底层函数（DataHub / review_analytics），
+# 数字口径完全一致——这也是为什么归因页的异常判定要调
+# diagnose_week，而不是自己再写一个阈值。
+
+@app.get('/api/pages/dashboard')
+def page_dashboard():
+    """总览：KPI + 52 周曲线 + 类目横向对比 + 原因结构 + 异常周。"""
+    from pages import dashboard
+    return dashboard()
+
+
+@app.get('/api/pages/attribution')
+def page_attribution(week: int | None = None):
+    """归因：给定一周，拆出涨了多少、涨在哪、为什么涨。
+
+    【week 为空时不等同于"第 1 周"】
+    省略 week 时返回最新一周，这是页面首次打开的默认。
+    如果传了越界值（0 或 99），diagnose_week 会返回 ok=False，
+    这里如实透出，不替它兜一个"最近一周"——那样用户会以为
+    自己看到的是第 99 周的真实数据。
+    """
+    from pages import attribution
+    return attribution(week)
+
+
+@app.get('/api/pages/reasons')
+def page_reasons(category: str | None = None):
+    """原因治理：9 个原因各自值不值得管 + 类目×原因热力矩阵。"""
+    from pages import reason_matrix
+    hub = get_hub()
+    if category and category not in hub.categories:
+        # 【未知类目要报错，不能静默返回全量】
+        # 静默兜底的话，前端传错一个类目名，页面会显示"全部类目"的数据，
+        # 而标题上写着那个错类目名 —— 看起来完全正常，数字全错。
+        raise HTTPException(400, f'未知类目：{category}（可选：{"、".join(hub.categories)}）')
+    return reason_matrix(category)
+
+
+@app.get('/api/pages/reviews')
+def page_reviews(entity: str = '本店'):
+    """评论洞察：情感结构 + 抱怨点 + 画像 + 分周走势。"""
+    from pages import review_overview
+    from tools import review_tools as rt
+    # 【rt.entities() 返回的是 dict 列表，不是字符串列表】
+    # 每个元素形如 {'entity_id','entity_name','n','mode',...}。
+    # 第一版直接 join，报 TypeError: sequence item 0: expected str, dict found。
+    # 好在它当场就炸了 —— 如果改成 `in` 判断，会静默地全部判为"未知实体"，
+    # 表现为"不管选哪个都 400"，同样难查但更费时间。
+    ents = [e['entity_name'] for e in rt.entities()]
+    if entity not in ents:
+        raise HTTPException(400, f'未知实体：{entity}（可选：{"、".join(ents)}）')
+    return review_overview(entity)
+
+
+@app.get('/api/pages/competitors')
+def page_competitors(category: str | None = None):
+    """竞品雷达：负评率对比 + 维度差距 + 用词差异 + 数据性质。"""
+    from pages import competitor_radar
+    hub = get_hub()
+    if category and category not in hub.categories:
+        raise HTTPException(400, f'未知类目：{category}')
+    return competitor_radar(category)
+
+
+@app.get('/api/pages/eval')
+def page_eval():
+    """自检：四套验收清单 + 数据规模快照 + 独立性论证。
+
+    【和 /api/eval 的区别，别混】
+    /api/eval 是**现场跑**八场景行为回归（要 LLM Key，几十秒）；
+    这个是把**已固化**的验收清单展示出来（毫秒级）。
+    两个端点名字像，职责完全不同：
+      · /api/eval       = "现在这台机器还能不能通过"
+      · /api/pages/eval = "我们到底验了什么、在多大的数据上验的"
+    """
+    from pages import eval_summary
+    return eval_summary()
+
+
+@app.get('/api/pages/nav')
+def page_nav():
+    """页面清单，给前端渲染导航。
+
+    【为什么要由后端给导航，而不是前端写死一个数组】
+    每个页面的副标题里都带着当前可选的维度（类目、实体、周次）。
+    写死的话，数据一改（比如加了一个类目）前端就得跟着改，
+    而这类"改了后端忘改前端"的事在这个项目里已经发生过。
+    """
+    hub = get_hub()
+    from tools import review_tools as rt
+    from pages import suggest_week
+    return {
+        'pages': [
+            {'key': 'dashboard', 'title': '总览',
+             'subtitle': '现在怎么样、哪里最疼', 'icon': 'grid'},
+            {'key': 'attribution', 'title': '归因',
+             'subtitle': '这一周为什么涨了', 'icon': 'route'},
+            {'key': 'reasons', 'title': '原因治理',
+             'subtitle': '9 个原因各自值不值得管', 'icon': 'layers'},
+            {'key': 'reviews', 'title': '评论洞察',
+             'subtitle': '情感 · 抱怨点 · 画像', 'icon': 'message'},
+            {'key': 'competitors', 'title': '竞品雷达',
+             'subtitle': '我们在同类里处在什么位置', 'icon': 'target'},
+            {'key': 'eval', 'title': '自检',
+             'subtitle': '验了什么、在多大的数据上验的', 'icon': 'check'},
+            {'key': 'chat', 'title': '问答',
+             'subtitle': '按需深入，让 Agent 自己查', 'icon': 'spark'},
+        ],
+        'categories': hub.categories,
+        # 【给前端的是实体名的扁平列表，不是 rt.entities() 的原样】
+        # 原样返回也行，但那会把 entity_id / mode / compliance 一起塞给导航栏，
+        # 而导航栏只需要一个能点下去的名字。
+        # 需要详情（哪个是竞品、多少条）时用 /api/pages/competitors。
+        'entities': [e['entity_name'] for e in rt.entities()],
+        'weeks': [int(w) for w in hub.weeks],
+        'latest_week': int(hub.latest_week),
+        # 【"打开哪一周"必须由后端决定，不能让前端自己猜】
+        # 前端第一版写的是 `n.weeks.filter(w => w > 0)`，取最后一个——
+        # 那其实是 latest_week（第 52 周），而最新一周常常是正常周。
+        # 于是归因页默认打开一个"没什么可解释"的周，
+        # 双门槛判定两块都是"不显著/不值得管"，看起来像系统没生效。
+        # 这里用和判定完全相同的 _diagnose_all，挑出**幅度最大的异常周**。
+        'default_week': suggest_week(),
+    }
+
+
+# ---------------------------------------------------------------------------
 # 静态前端（构建产物存在时直接托管，现场演示不需要跑两个终端）
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# 启动预热
+# ---------------------------------------------------------------------------
+#
+# 【为什么要有这一步，而不是"第一次访问时再算"】
+# 六个页面里有两个是"首次很贵"：
+#   · 总览：53 次 diagnose_week，约 900ms（之后 20ms）
+#   · 评论：jieba 首次加载 + 27,000 条分词，约 5.5s（之后 60ms）
+# 如果留到首次访问，用户点开"评论洞察"要盯着空白屏等 5 秒，
+# 而且会以为是自己网慢或者程序卡了。
+#
+# 【为什么放后台线程，不放在启动时同步跑】
+# 同步跑会把 /api/health 从 80ms 拖到 6 秒 ——
+# 健康检查是用来判断"服务起来了没有"的，它必须立刻回。
+# 放后台线程，前端打完健康检查再点页面时，预热通常已经完成。
+#
+# 【为什么失败只记日志不抛出】
+# 预热是优化，不是功能。预热失败最多是首次访问慢一点，
+# 不应该让整个服务起不来。
+@app.on_event('startup')  # noqa: deprecated（本机 FastAPI 版本仍支持）
+def _warmup() -> None:
+    """后台预热最贵的两页，让首屏不承担冷启动成本。"""
+    import threading
+    import time as _t
+
+    def _run() -> None:
+        try:
+            from pages import dashboard, review_overview
+            t0 = _t.time()
+            dashboard()
+            t1 = _t.time()
+            review_overview('本店')
+            t2 = _t.time()
+            print(f'[warmup] dashboard {int((t1 - t0) * 1000)}ms · '
+                  f'reviews {int((t2 - t1) * 1000)}ms', flush=True)
+        except Exception as e:          # noqa: BLE001
+            print(f'[warmup] 跳过（不影响服务）：{e}', flush=True)
+
+    threading.Thread(target=_run, name='warmup', daemon=True).start()
+
 
 _DIST = ROOT.parent / 'frontend' / 'dist'
 if _DIST.is_dir():

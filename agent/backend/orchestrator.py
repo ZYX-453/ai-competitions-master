@@ -35,7 +35,25 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncIterator
 
 from tools.data_hub import DataHub, get_hub
+from tools import review_tools as _rt
 from llm_client import LLMClient, from_env as llm_from_env
+
+# ---------------------------------------------------------------------------
+# 评论分析工具的路由表
+# ---------------------------------------------------------------------------
+# 【为什么用一张显式的 dict，而不是 getattr(review_tools, name)】
+# getattr 会把模块里所有函数都变成可调用工具——包括 _slice、
+# _miss、source_nature 这些内部函数。模型一旦幻觉出一个
+# "slice" 调用，getattr 就真的会执行它，然后返回一个
+# 看起来像数据的东西。显式登记等于把"对外接口"画出来，
+# 也让 TOOL_SCHEMA 和实际可执行的东西能对上（手册 = 实现）。
+_REVIEW_TOOLS = {
+    'review_sentiment': _rt.review_sentiment,
+    'review_wordcloud': _rt.review_wordcloud,
+    'review_persona': _rt.review_persona,
+    'competitor_compare': _rt.competitor_compare,
+    'collector_status': _rt.collector_status,
+}
 
 # ---------------------------------------------------------------------------
 # 工具注册表：既给 LLM 做 function calling，也给确定性引擎做执行入口
@@ -225,6 +243,107 @@ TOOL_SCHEMA: list[dict] = [
             },
         },
     },
+    # ==================================================================
+    # 【v3.1】评论分析四件套 + 采集器
+    #
+    # 和上面那些工具的区别：上面回答"数字是多少"（退货率、损失额），
+    # 这四个回答"用户在说什么"。数据源也不同 ——
+    # 上面读 data/processed/*.csv（订单/退货表），
+    # 这四个读 data/review_pool/corpus.csv（评论文本）。
+    #
+    # 描述里特意写明"文本判定"和"统计检验"，是因为模型在
+    # function calling 时主要看 description 来选工具。
+    # 如果只写"分析评论情感"，它会在"差评率是多少"这种问题上
+    # 犹豫该调这个还是调 diagnose_week。
+    # ==================================================================
+    {
+        'type': 'function',
+        'function': {
+            'name': 'review_sentiment',
+            'description': ('对评论文本做情感判定：正/负/中性占比、净情感值、'
+                            '按维度（材质/物流/尺码/价格/服务）拆解负面占比。'
+                            '这是"用户到底满不满意"的直接答案，'
+                            '和退货率不同——退货率来自订单表，情感来自评论文本。'),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'entity': {'type': 'string',
+                               'description': '实体名，默认本店。可选：本店 / 竞品A / 竞品B / 竞品C / 竞品D'},
+                    'category': {'type': 'string',
+                                 'description': '限定类目：服饰/数码/生鲜/个护'},
+                    'source': {'type': 'string',
+                               'description': 'store（本店）或 competitor（竞品池）'},
+                },
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'review_wordcloud',
+            'description': ('评论高频词统计。带 polarity 时按'
+                            '"差评里比好评里常见多少倍"（lift）排序，'
+                            '自动滤掉商品名和口头禅，只留下真正的抱怨点/夸奖点。'
+                            '每个词都带原句，可回溯。'),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'entity': {'type': 'string'},
+                    'category': {'type': 'string'},
+                    'polarity': {'type': 'string',
+                                 'description': '负向 / 正向 / 不传（全量）'},
+                    'top_k': {'type': 'integer', 'description': '返回前 N 个词，默认 40'},
+                    'source': {'type': 'string'},
+                },
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'review_persona',
+            'description': ('从评论语言里提取用户画像：使用场景（送礼/自用/复购）、'
+                            '关注点（价格/品质/外观/功能/服务）、决策特征、情绪强度。'
+                            '每条结论都挂着触发它的原话。'
+                            '注意：这是语言证据统计，不是人群预测——'
+                            '年龄性别收入这些评论里没有。'),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'entity': {'type': 'string'},
+                    'category': {'type': 'string'},
+                    'source': {'type': 'string'},
+                },
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'competitor_compare',
+            'description': ('多实体横向对比：各实体负评率、维度差异、'
+                            '与本店的两比例 z 检验（p<0.05 才判定显著）、'
+                            '以及本店与标杆的特征词差异。'
+                            '回答"我们和同行比差在哪"。'),
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'category': {'type': 'string'},
+                    'store_name': {'type': 'string', 'description': '本店实体名，默认「本店」'},
+                },
+            },
+        },
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'collector_status',
+            'description': ('列出可用的评论采集器及其合规性：'
+                            '哪些能全自动跑、哪些需要平台资质、哪些不实现。'
+                            '回答"数据从哪来/能不能自动采集"。'),
+            'parameters': {'type': 'object', 'properties': {}},
+        },
+    },
 ]
 
 
@@ -262,6 +381,14 @@ TOOL_TITLE = {
     'reason_kb': '检索知识库方案',
     'trend': '拉取时序走势',
     'compare_weeks': '对比多周严重程度',
+    # v3.1 评论分析四件套
+    # 标题写"在做什么"，不写"调用了什么"。推理链是给人读的，
+    # "review_sentiment" 对运营没有意义，"判定评论情感"才是。
+    'review_sentiment': '判定评论情感',
+    'review_wordcloud': '统计高频词',
+    'review_persona': '提取用户画像',
+    'competitor_compare': '对比竞品表现',
+    'collector_status': '检查数据来源',
 }
 
 
@@ -381,6 +508,73 @@ def parse_category(q: str) -> str | None:
     for c in ('服饰', '数码', '生鲜', '个护'):
         if c in q:
             return c
+    return None
+
+
+# ---------------------------------------------------------------------------
+# v3.1 评论分析：实体与极性的解析
+# ---------------------------------------------------------------------------
+
+# 【为什么要单独解析实体，不能在工具里"猜"】
+# 用户嘴里的实体名和语料里的正式名不一致：
+#   用户说「竞品C」   语料里是「竞品C（低价走量）」
+#   用户说「同行」    语料里根本没有这个词
+#   用户说「我们店」  语料里是「本店」
+# 如果不在编排层解析，工具函数就得自己猜，而它拿到的只有
+# 一个字符串——猜错了返回空结果，用户看到"没有数据"，
+# 却不知道是"这个店不存在"还是"筛选太细"。
+# 解析放在这里，好处是可以在推理链上显示"我把'我们店'理解成本店"。
+_ENTITY_ALIASES: list[tuple[str, tuple[str, ...]]] = [
+    ('本店', ('我们店', '我们自己', '自家', '我家店', '本店', '自己家', '我们')),
+    ('竞品A', ('竞品a', '竞品A', '对手a', 'a店', '同价位那家')),
+    ('竞品B', ('竞品b', '竞品B', '对手b', 'b店', '高价位那家')),
+    ('竞品C', ('竞品c', '竞品C', '对手c', 'c店', '低价那家', '走量那家')),
+    ('竞品D', ('竞品d', '竞品D', '对手d', 'd店', '新锐那家', '内容那家')),
+]
+
+
+def parse_entity(q: str) -> str | None:
+    """从问题里认出用户说的是哪一家。
+
+    【返回的是"用户怎么说"，不是语料里的正式名】
+    这一条和 parse_reason 的处理相反，理由不同：
+      · 原因要归一化，因为知识库有别名表且需要精确匹配
+      · 实体不能归一化成全名，因为工具层的 _slice 支持包含匹配，
+        传「竞品C」能命中「竞品C（低价走量）」，传全名反而要求
+        用户一字不差。
+    更重要的是：答案里要写"你说的是竞品C"，如果这里就换成
+    全名，正文读起来会像系统在替用户改名。
+    """
+    s = q
+    low = s.lower()
+    for show, aliases in _ENTITY_ALIASES:
+        for a in aliases:
+            if a.lower() in low or a in s:
+                # 【"我们"这个词太泛，必须排除"我们"当人称代词的情况】
+                # "我们店退货率高吗"里的"我们"指本店，成立；
+                # "我们想知道竞品怎么样"里的"我们"只是个主语，
+                # 若按本店解析，用户问竞品却拿到本店的答案。
+                if a == '我们' and any(
+                        k in s for k in ('竞品', '对手', '同行', '别家', '其他店')):
+                    continue
+                return show
+    return None
+
+
+def parse_polarity(q: str) -> str | None:
+    """用户问的是差评、好评，还是全部。
+
+    【为什么"差评"要映射成"负向"而不是直接传"差评"】
+    工具层的 polarity 参数只认「正向/负向/中性」三个值——
+    这是 analyze_sentiment 的判定口径。如果这里传"差评"，
+    工具会静默忽略（因为它不在三个值里），返回全量词频。
+    那正是我们刚修掉的那个 bug（参数收了但没生效）。
+    在入口处就对齐口径，比在出口处解释为什么结果不对要好。
+    """
+    if any(k in q for k in ('差评', '负面', '负向', '不满', '抱怨', '吐槽')):
+        return '负向'
+    if any(k in q for k in ('好评', '正面', '正向', '满意', '夸')):
+        return '正向'
     return None
 
 
@@ -611,6 +805,20 @@ _BIZ_TERMS = (
     # 动作与归因
     '为什么', '原因', '归因', '异常', '诊断', '占比', '结构', '建议',
     '怎么办', '怎么做', '动作', '方案', '值多少', '多少钱',
+    # ---------------------------------------------------------------
+    # 【v3.1 评论分析四件套的业务词】
+    # 少了这一块，"帮我分析一下评论的情感"会被 is_in_scope 当成
+    # 业务问题时靠"评论"两字放行、但 classify_intent 接不住，
+    # 最后掉进 diagnose 兜底 —— 答出一份周报。
+    # 这和"第 44 周不点名""标签脱落不接住"是同一个病：
+    # **句子里点了名，系统没接住**。
+    # 所以新增能力的第一个动作不是写工具，是把触发词登记进来。
+    # ---------------------------------------------------------------
+    '情感', '情绪', '正负', '正面', '负面', '好评率', '差评率', '满意度',
+    '词云', '热词', '高频词', '关键词', '在说什么', '都在说', '说了什么',
+    '画像', '人群', '用户特征', '关注点', '谁在买', '什么样的用户',
+    '竞品', '对手', '同行', '对标', '对比竞品', '同行对比', '别人家',
+    '采集', '爬取', '抓取', '数据来源', '数据从哪来', '导入',
 )
 
 # 明确的"非本产品"信号：命中且没有业务词时，直接拒绝。
@@ -698,6 +906,57 @@ def classify_intent(q: str) -> str:
     所以 loss 必须排在 value 前面，而且要显式识别"亏/损失/成本"这类词。
     """
     s = q.lower()
+    # ===============================================================
+    # 【v3.1 评论分析四件套，必须排在最前面】
+    #
+    # 为什么必须最前：这些问法里几乎每一句都带着"为什么/怎么样/
+    # 哪个更"，而那三个词在下面每一个分支里都是判据。
+    # 例如「竞品的情感怎么样」，如果放到 diagnose 之后，
+    # 会被 '怎么样' 附近的分支抓走去做周度归因。
+    # 实测过的老毛病就是这么来的：句子里点了名，系统没接住。
+    #
+    # 判据设计原则：**先认"问的是什么东西"，再认"问它怎么样"**。
+    # 名词优先级高于动词，因为用户问的核心对象是名词。
+    # ===============================================================
+
+    # ① 采集器 / 数据从哪来
+    # 这个必须最先判：问"你能自动爬吗"里含"能"字，
+    # 但没有其他任何词能接住它，落进 diagnose 会答出一份退货率报告。
+    if any(k in q for k in ('爬取', '爬虫', '抓取', '采集', '数据从哪来',
+                            '数据来源', '怎么导入', '自动获取', '能爬')):
+        return 'collector'
+
+    # ② 竞品对比
+    # 「竞品」这个词最强，只要出现就一定是竞品对比，
+    # 不管后面跟的是"怎么样/为什么/哪个好"。
+    if any(k in q for k in ('竞品', '对手', '同行', '对标', '别人家',
+                            '其他店', '别家')):
+        return 'competitor'
+
+    # ③ 词云 / 高频词
+    # 必须在情感之前判：「差评都在说什么」既有"差评"（情感类词）
+    # 又有"在说什么"（词云类词），用户真正想看的是词，
+    # 不是正负比例。判据是"有没有问'说了什么'"。
+    if any(k in q for k in ('词云', '热词', '高频词', '关键词',
+                            '在说什么', '都在说', '说了什么', '说什么',
+                            '提到最多', '出现最多')):
+        return 'wordcloud'
+
+    # ④ 用户画像
+    if any(k in q for k in ('画像', '什么样的人', '谁在买', '什么人在买',
+                            '用户特征', '人群特征', '关注点', '用户是谁')):
+        return 'persona'
+
+    # ⑤ 情感分析
+    # 【注意"差评率/好评率"也归这里】
+    # 它们和"退货率"长得很像，但含义完全不同：
+    # 退货率来自订单表，差评率来自评论文本。
+    # 用户问"差评率多少"，要的是情感判定，不是退货归因。
+    if any(k in q for k in ('情感', '情绪', '正负面', '正面负面',
+                            '好评率', '差评率', '满意度', '评价倾向',
+                            '正负', '好评多少', '差评多少')):
+        return 'sentiment'
+
     # 【对比意图必须最先判】
     # "第44周和第41周哪个更严重"里有"更严重"但没命中"为什么/原因"，
     # 原来会掉进最后的 diagnose 兜底，然后被单周诊断吃掉，
@@ -785,7 +1044,13 @@ class Agent:
     def _call(self, name: str, args: dict) -> tuple[Any, float, str]:
         """真实执行一个工具，返回 (结果, 耗时ms, 摘要)。"""
         t0 = time.perf_counter()
-        fn = getattr(self.hub, name, None)
+        # 【两套工具，两条路由】
+        # DataHub 上的工具读 data/processed（订单/退货表），
+        # review_tools 上的读 data/review_pool/corpus.csv（评论文本）。
+        # 放在两个模块里不是随意的：分析层绝不能碰带 label 的表，
+        # 文件分离是这条约束唯一可靠的执行方式（见 review_tools 模块头）。
+        # 所以这里按名字分派，而不是把五个函数塞进 DataHub 变成它的方法。
+        fn = _REVIEW_TOOLS.get(name) or getattr(self.hub, name, None)
         if fn is None:
             return {'ok': False, 'error': f'未知工具 {name}'}, 0.0, '未知工具'
         try:
@@ -839,6 +1104,30 @@ class Agent:
             if name == 'compare_weeks':
                 ww = '、'.join(f"第{x['week']}周" for x in d['weeks'])
                 return f"对比 {ww}，最严重是第 {d['worst_week']} 周"
+            # ---- v3.1 评论分析四件套 ----
+            if name == 'review_sentiment':
+                return (f"{d['entity']} {d['n']:,} 条：正 {d['pos_pct']*100:.1f}% / "
+                        f"负 {d['neg_pct']*100:.1f}% / 中性 {d['neu_pct']*100:.1f}%"
+                        f"（净 {d['net_sentiment']:+.2f}）")
+            if name == 'review_wordcloud':
+                top = d['items'][0]['word'] if d.get('items') else '无'
+                how = '按差评偏离度' if d.get('rank_by') == 'lift' else '按频次'
+                return (f"{d['n_reviews']:,} 条评论，{d['n_unique_words']:,} 个词，"
+                        f"{how}取 Top{len(d['items'])}，首位「{top}」")
+            if name == 'review_persona':
+                t = (d.get('top_signals') or [{}])[0]
+                return (f"{d['n']:,} 条评论，{len(d.get('groups') or [])} 组画像，"
+                        f"最强信号「{t.get('signal', '无')}」"
+                        f"{(t.get('n') or 0)} 条")
+            if name == 'competitor_compare':
+                es = d.get('entities') or []
+                return (f"{len(es)} 个实体，负评率 "
+                        f"{es[0]['neg_pct']*100:.1f}%–{es[-1]['neg_pct']*100:.1f}%；"
+                        f"{d.get('sig_summary', '')}")
+            if name == 'collector_status':
+                cs = d.get('collectors') or []
+                ok = sum(1 for c in cs if c['available'] != '不实现')
+                return f"{len(cs)} 个采集器，{ok} 个可用（含用户主动导入）"
         except Exception:
             pass
         return '完成'
@@ -1063,6 +1352,19 @@ class Agent:
         # 对比意图需要"用户提到的全部周次"，而不是第一个
         if intent == 'compare':
             state['compare_weeks'] = parse_weeks(q)
+
+        # 【v3.1】评论分析：钉住用户点名的实体和极性
+        # 和 asked_week / asked_reason 一样是只读快照 ——
+        # 它们代表"用户最初问的是什么"，不该被分析过程改写。
+        if intent in ('sentiment', 'wordcloud', 'persona', 'competitor'):
+            _ent = parse_entity(q)
+            if _ent:
+                state['asked_entity'] = _ent
+                state['facts']['asked_entity'] = _ent
+            _pol = parse_polarity(q)
+            if _pol:
+                state['asked_polarity'] = _pol
+                state['facts']['asked_polarity'] = _pol
         # 记住"用户原本问的是哪一周"。
         # state['week'] 会被 _react 改写（重定向后变成真正异常的那一周），
         # 所以不能拿它来写"你问的第 X 周"——那会写成目标周，自相矛盾。
@@ -1173,6 +1475,34 @@ class Agent:
     # ---------------- 计划 ----------------
     def _plan(self, intent: str, state: dict) -> list[str]:
         """初始计划。刻意做得短——真正的长计划在 _react 里长出来。"""
+        # ===========================================================
+        # 【v3.1】评论分析四件套的计划
+        #
+        # 这几个计划的共同点：**不先跑 overview**。
+        # overview 给的是订单/GMV/退货率，跟"用户在说什么"无关。
+        # 先跑它只有两个后果：多花 0.3 秒，以及在推理链上
+        # 出现一格和问题无关的内容（用户会觉得系统没听懂）。
+        #
+        # 情感 → 词云 → 画像 是**递进**关系，不是三选一：
+        #   情感告诉你"多少人不满意"，
+        #   词云告诉你"他们在抱怨什么"，
+        #   画像告诉你"抱怨的是哪类人、在什么场景下"。
+        # 只答第一个等于只说"有 8% 的人不满意"，运营拿不走动作。
+        # ===========================================================
+        if intent == 'sentiment':
+            return ['review_sentiment', 'review_wordcloud']
+        if intent == 'wordcloud':
+            # 词云单独问时，不追加情感分析——
+            # "差评都在说什么"要的就是那批词，多给一个占比是答非所问。
+            return ['review_wordcloud']
+        if intent == 'persona':
+            return ['review_persona', 'review_sentiment']
+        if intent == 'competitor':
+            # 竞品对比 → 拆维度找差距（词云做特征词，已经内含在对比里）
+            return ['competitor_compare', 'review_sentiment']
+        if intent == 'collector':
+            return ['collector_status']
+
         if intent == 'overview':
             return ['overview', 'diagnose_week', 'trend']
         if intent == 'compensation':
@@ -1230,6 +1560,65 @@ class Agent:
         # 否则后续所有工具都会跟着用这个周参数。
         w = state.pop('target_week', None) or state.get('week')
         cat = state.get('category')
+        # ===========================================================
+        # 【v3.1】评论分析四件套的参数
+        #
+        # 这里有一处必须小心：category 不能无脑传。
+        # state['category'] 是从问题里 parse 出来的（服饰/数码/生鲜/个护），
+        # 而订单表和分析表用的是同一套类目名，可以直接传。
+        # 但 entity 不同 —— 用户在问题里说"竞品C"，语料里的正式名是
+        # "竞品C（低价走量）"。review_tools 的 _slice 支持模糊匹配，
+        # 这里传用户原话就行，不要在编排层再做一次归一化
+        # （两处归一化必然不一致，最后会出现"编排层认为匹配上了、
+        #   工具层认为没匹配"的诡异空结果）。
+        # ===========================================================
+        if name in ('review_sentiment', 'review_wordcloud', 'review_persona'):
+            a: dict = {}
+            # 【没点明实体时，默认只看本店，不是看全量】
+            # 这点踩过：用户问"分析一下评论的情感"，没提哪一家，
+            # 于是 entity=None → 工具层拿全量 17,660 条（本店 13,500
+            # + 4 个竞品 4,160 一起算），得出"负向 12.8%"。
+            # 而标题写的是"本店"——数字和标题直接矛盾。
+            # 更糟的是这个数字没有业务含义：把自家评论和竞品评论
+            # 混在一起算情感占比，等于把竞争对手的差评算进自己的账。
+            # 默认看本店，是这个问题唯一说得通的默认值。
+            a['entity'] = state.get('asked_entity') or '本店'
+            if cat:
+                a['category'] = cat
+            if name == 'review_wordcloud':
+                pol = state.get('asked_polarity')
+                # 【情感分析里追加的词云，默认要看负向】
+                # 这一点必须在这里定，不能留给工具层默认。
+                #
+                # 起因：用户问「帮我分析一下评论的情感」，计划是
+                # 情感 → 词云（_react 见负评率 ≥5% 时追加）。
+                # 但 _args 只把"用户嘴上说的极性"传下去，用户没提
+                # 差评好评，于是 polarity=None，工具退回全量频次排序。
+                # 结果是词云块显示 质量 1792 / 苹果 1500 / 裤子 1131 ——
+                # 那在这个答案里几乎没有价值：用户问"情感如何"，
+                # 追问的自然是"不满意的那些人在抱怨什么"。
+                #
+                # 【为什么不干脆让 persona 也传负向】
+                # 画像要看全量：只统计差评会让"品质优先""囤货复购"
+                # 这类正向行为证据整体消失，画像就只剩一半人。
+                #
+                # 【competitor 也要传负向，理由和 sentiment 同源】
+                # 竞品对比里 _react 追加词云的触发条件是
+                # "确有某家显著优于我们"，那一步要回答的问题是
+                # "那我们自己的差评在说什么" —— 看全量高频词毫无意义
+                # （只会看到 质量/苹果/裤子，和自己的短板无关）。
+                # 实测：不加这一条，竞品答案里也挂着一块
+                # "全量高频词：质量 1792 / 苹果 1500"。
+                if not pol and state.get('intent') in ('sentiment', 'competitor'):
+                    pol = '负向'
+                if pol:
+                    a['polarity'] = pol
+                a['top_k'] = 40
+            return a
+        if name == 'competitor_compare':
+            return {'category': cat} if cat else {}
+        if name == 'collector_status':
+            return {}
         if name in ('diagnose_week', 'attribution_structure'):
             a = {}
             if w:
@@ -1314,6 +1703,42 @@ class Agent:
     def _thought(self, name: str, state: dict) -> str:
         """每一步的推理独白。写成人话，不写"正在调用工具"。"""
         f = state.get('facts', {})
+        # ===========================================================
+        # 【v3.1】评论分析的第一步，先讲清"我在读哪份数据"
+        #
+        # 这几句不是装饰。推理链是评委唯一能看到"系统怎么想"的地方，
+        # 而评论分析最容易引起的质疑是"你凭什么判得出正负"。
+        # 所以第一格必须主动交代：读的是文本、不是标签、判据是词典。
+        # 把方法的软肋先说清楚，比等人问出来再解释更可信。
+        # ===========================================================
+        if name == 'review_sentiment':
+            _ent = state.get('asked_entity') or '本店'
+            return (f'先判「{_ent}」的评论正负。我不读任何已标注的标签——'
+                    f'那些数据在语料池里被物理删掉了，我拿到手的只有原句和星级。'
+                    f'判定靠情感词典逐字扫描：先认词，再看前面有没有否定，'
+                    f'最后看有没有转折把语气压下去。')
+        if name == 'review_wordcloud':
+            _pol = state.get('asked_polarity')
+            if _pol:
+                return (f'再看{_pol}评论里到底在说什么。这一步不能简单数词频——'
+                        f'"苹果""手机"这种商品名在任何评论里都高频，数出来只会看到 SKU 名。'
+                        f'我比的是"这个词在{_pol}里比在另一类里常见多少倍"，'
+                        f'没有区分度的词会自动沉底。')
+            return ('看这批评论的高频词。这里只按出现次数排，不做区分度校正——'
+                    '因为用户问的是"全部评论在说什么"，不是"什么词能区分好坏"。')
+        if name == 'review_persona':
+            return ('然后是画像。这里我要特别小心一件事：评论里没有年龄、性别、收入，'
+                    '任何画像里出现这三项都是编的。所以我不预测人群，'
+                    '只统计语言证据——说"给孩子买"的有多少条、说"太贵"的有多少条，'
+                    '每条结论都挂着原话供你核对。')
+        if name == 'competitor_compare':
+            return ('把几家放在同一口径下比。这里有个坑：负评率 21% 和 25% 差 4 个点，'
+                    '看着像差距，但如果每家只有 200 条评论，那就是噪声。'
+                    '所以每个对比都要过两比例 z 检验，p 值不够就不写进结论。')
+        if name == 'collector_status':
+            return ('查一下数据是怎么进来的。这一格会如实说清哪些渠道能自动跑、'
+                    '哪些需要平台资质、哪个我明确不做——'
+                    '包括不做的那个以及为什么。')
         if name == 'overview':
             return '先建立经营基准。没有基准，任何"涨了跌了"都没有意义——我需要知道这家店的退货率正常水位在哪。'
         if name == 'diagnose_week':
@@ -1383,6 +1808,90 @@ class Agent:
         """
         d = out.get('data') or {}
         if not out.get('ok'):
+            return []
+
+        # ===========================================================
+        # 【v3.1】评论分析的后续决策 —— 这里才是"Agent"该有的样子
+        #
+        # 如果四个模块每次都固定跑完，那它就是个流水线，
+        # 只是把四张图排在了一起。真正的分支在这里：
+        # ===========================================================
+        if name == 'review_sentiment':
+            neg = d.get('neg_pct') or 0
+            n = d.get('n') or 0
+            # 分支 A：样本太小 → 什么都别追了，先把"别信这么细"说清楚。
+            # 200 条评论算出 8.3% 的负评率，误差带能到 ±5pp，
+            # 在这个基础上再拆维度就是把噪声拆成更细的噪声。
+            if n < 200:
+                state['facts']['review_small_sample'] = True
+                return []
+            # 分支 B：负评率低（<5%）→ 不追词云。
+            # "差评在说什么"这个问题在负评只有 3% 时，
+            # 答案就是"没多少人在骂"，再列 40 个词只会让人误以为问题很大。
+            if neg < 0.05 and state['intent'] == 'sentiment':
+                state['facts']['review_low_neg'] = True
+                return []
+            # 分支 C：负评率不低 → 必须追到"抱怨什么"。
+            # 这是"8% 的差评"和"8% 的差评都在骂尺码"的区别。
+            #
+            # 【用 facts 判断"跑过没有"，不要用 state['done']】
+            # state 里没有 done 这个字段。第一版我凭印象写了
+            # state.get('done')，它永远是 None，于是这个条件恒为真，
+            # review_wordcloud 会被反复追加 —— 幸好 _plan 的
+            # 去重逻辑（add = [f for f in follow if f not in steps[i:]]）
+            # 挡住了重复插入，否则就是死循环。
+            # 但"靠下游兜住"不是设计，是侥幸：换个调用顺序就炸了。
+            # 正确的判据是"词云的结果有没有沉淀下来"。
+            if neg >= 0.05 and not state['facts'].get('wordcloud'):
+                # 【但 persona 意图下不追】
+                # 画像是"是谁在买、在什么场景用"，它要的是全量语言证据，
+                # 不是"抱怨点"。而这里能追加的词云只能是不带极性的全量词云
+                # （因为 persona 场景下 _args 不补负向），
+                # 全量词云出来的就是 质量/苹果/裤子 这种商品名和泛词 ——
+                # 在画像答案里既非证据也非问题。
+                # 所以这个跟随动作只在 sentiment / competitor 下发生。
+                if state.get('intent') in ('sentiment', 'competitor'):
+                    return ['review_wordcloud']
+            return []
+
+        if name == 'review_wordcloud':
+            # 词云出来之后，如果首位抱怨点集中在某个维度上，
+            # 顺手接一句画像——"抱怨尺码的人是谁"（送礼的？复购的？）。
+            # 【但这个追加要克制】
+            # 只在词云指向具体维度时才加。如果首位词是"失望""垃圾"
+            # 这种纯情绪词，说明抱怨没有具体指向，画像也答不出什么。
+            items = d.get('items') or []
+            top = items[0]['word'] if items else ''
+            _dim_words = {'尺码', '版型', '料子', '面料', '物流', '快递', '客服',
+                          '售后', '色差', '价格', '太贵', '新鲜', '化冻'}
+            if top in _dim_words and state['intent'] == 'wordcloud':
+                state['facts']['wordcloud_top_dim'] = top
+                return ['review_persona']
+            return []
+
+        if name == 'review_persona':
+            # 画像之后不追加。画像本身就是终点：
+            # 再往下接"那该怎么办"就滑进了 action_playbook 的领域，
+            # 而那个工具的依据是退货原因表，不是评论文本——
+            # 拿文本分析去驱动动作清单，等于跨体系下结论。
+            return []
+
+        if name == 'competitor_compare':
+            # 【竞品对比之后，只在"确有显著差距"时才拆本店自己的负评】
+            # 如果 4 个竞品和本店的差异都不显著，那结论就是"没有差距"，
+            # 此时再去拆本店的差评词，等于自己给自己找问题——
+            # 而用户问的是"我们和别人比怎么样"，答案是"差不多"。
+            _sig = [e for e in (d.get('entities') or [])
+                    if (e.get('vs_store') or {}).get('significant')
+                    and (e.get('vs_store') or {}).get('diff_pp', 0) < 0]
+            # 注：diff_pp < 0 表示该竞品负评率比本店低，即本店更差。
+            if _sig:
+                state['facts']['competitor_behind'] = True
+                state['facts']['competitor_behind_whom'] = _sig[0]['entity']
+                return ['review_wordcloud']
+            return []
+
+        if name == 'collector_status':
             return []
 
         if name == 'diagnose_week':
@@ -1757,6 +2266,21 @@ class Agent:
             f['trend'] = d
         elif name == 'compare_weeks':
             f['compare'] = d
+        # ---- v3.1 评论分析 ----
+        # 和上面那些一样的模式：一个工具一个 key，组装答案时按 key 取。
+        # 【这几个 key 名不能缩写】
+        # 曾经想过用 f['rev'] 之类的短名，但 facts 里已经有 12 个 key，
+        # 再放三个三字母缩写进去，三个月后没人记得 rev_s 是什么。
+        elif name == 'review_sentiment':
+            f['sentiment'] = d
+        elif name == 'review_wordcloud':
+            f['wordcloud'] = d
+        elif name == 'review_persona':
+            f['persona'] = d
+        elif name == 'competitor_compare':
+            f['competitor'] = d
+        elif name == 'collector_status':
+            f['collectors'] = d
 
     # ---------------- 答案组装 ----------------
     # ------------------------------------------------------------------
@@ -2908,6 +3432,418 @@ headline 的例子（照这个意思写，不要照抄字面）：
             'week': worst['week'],
         }
 
+    # ------------------------------------------------------------------
+    # 【v3.1】评论分析四件套的答案组装
+    #
+    # 单独一条路径，和"按原因治理"当初的处理一样：
+    # 这几类问题的答案结构和周度诊断完全不同 ——
+    # 没有 KPI 卡片（退货率/基线/z 值在这里全是无关信息）、
+    # 没有归因链（它不是某一周的现象）、没有动作清单（依据不在文本里）。
+    # 硬塞进主流程会产出一堆空 block 占位。
+    #
+    # 【这套组装的核心原则：每个数字旁边都要有"它从哪来"】
+    # 情感分析最容易受到的质疑是"你凭什么说这句是差评"。
+    # 所以每一个百分比下面都挂原句，每一个维度后面都标样本量。
+    # ------------------------------------------------------------------
+
+    def _compose_review(self, state: dict) -> dict:
+        f = state['facts']
+        s = f.get('sentiment')
+        w = f.get('wordcloud')
+        p = f.get('persona')
+        c = f.get('competitor')
+        col = f.get('collectors')
+
+        blocks: list[dict] = []
+        caveats: list[str] = []
+        segs: list[str] = []
+
+        _ent = state.get('asked_entity') or '本店'
+        _cat = state.get('category')
+        _scope = f'{_ent} · {_cat}类目' if _cat else _ent
+        _pol = state.get('asked_polarity')
+
+        # ---------- 唯一来源说明 ----------
+        # 【为什么第一块就是"数据从哪来"】
+        # 竞品池是 DGP 模拟的。如果不在最前面说清，
+        # 后面每一个百分点都会被当成实测——这是这套系统里
+        # 最容易犯、也最伤信誉的错。
+        if s:
+            nat = s.get('nature') or {}
+            mode = nat.get('mode')
+            if mode == 'batch_seed' and c:
+                caveats.append(
+                    '竞品数据是标定后的模拟语料（非实时抓取），'
+                    '用于验证分析链路；结论可看方向，不能当行业实测数字引用。')
+
+        # ---------- 情感 ----------
+        if s and s.get('ok'):
+            n = s['n']
+            blocks.append({
+                'type': 'kpi',
+                'items': [
+                    {'label': '评论样本', 'value': f'{n:,}',
+                     'delta': '条', 'tone': 'neutral'},
+                    {'label': '负向占比', 'value': f'{s["neg_pct"]*100:.1f}%',
+                     'delta': f'{s["neg"]:,} 条', 'tone': 'bad'},
+                    {'label': '正向占比', 'value': f'{s["pos_pct"]*100:.1f}%',
+                     'delta': f'{s["pos"]:,} 条', 'tone': 'good'},
+                    {'label': '净情感值', 'value': f'{s["net_sentiment"]:+.2f}',
+                     'delta': s.get('net_readable', ''), 'tone':
+                         'good' if s['net_sentiment'] > 0 else 'bad'},
+                ],
+            })
+
+            segs.append(
+                f'{_scope} 的 {n:,} 条评论里，负向 {s["neg_pct"]*100:.1f}%、'
+                f'正向 {s["pos_pct"]*100:.1f}%、中性 {s["neu_pct"]*100:.1f}%。'
+                f'换成实感：{s.get("net_readable", "")}。')
+
+            # 维度拆解：只在有足够样本时才画
+            dims = [d for d in (s.get('dimensions') or [])
+                    if d.get('n') and d['n'] >= 30 and d.get('neg_pct') is not None]
+            if dims:
+                dims.sort(key=lambda x: -(x['neg_pct'] or 0))
+                blocks.append({
+                    'type': 'bars',
+                    'title': '各维度的负面占比（分母是提到该维度的评论）',
+                    'items': [{
+                        'label': d['label'],
+                        'value': d['n'],
+                        'share': d['neg_pct'],
+                        'pct': d['neg_pct'] / max(
+                            max(x['neg_pct'] for x in dims), 1e-9),
+                        'extra': f"{d['n']:,} 条提到了「{d['label']}」，"
+                                 f"其中 {(d['neg_pct'] or 0)*100:.1f}% 是负向",
+                    } for d in dims],
+                    'note': ('分母不是全部评论，而是"提到这个维度"的评论。'
+                             '否则物流这种只有少数人提及的维度会被稀释成很低。'),
+                })
+                worst_dim = dims[0]
+                segs.append(
+                    f'按维度拆，问题最集中的是**{worst_dim["label"]}**：'
+                    f'{worst_dim["n"]:,} 条评论提到它，其中 '
+                    f'{worst_dim["neg_pct"]*100:.1f}% 是负向。'
+                    f'这个比例高于其他维度，说明抱怨不是零散分布的，'
+                    f'有明确的落点。')
+
+            # 判定方法说明
+            mix = s.get('src_mix') or {}
+            _rp = mix.get('rating_prior', 0)
+            if _rp:
+                caveats.append(
+                    f'{_rp:,} 条（{_rp/max(n,1)*100:.1f}%）评论用的是星级兜底——'
+                    f'这些句子情感词太弱（如"东西收到了"），'
+                    f'只能借用户打的星级判断。这个口径对生鲜类目偏保守'
+                    f'（3 星可能算差评），对数码偏宽松。')
+
+        # ---------- 词云 ----------
+        # 【无对照组的频次词云，在"画像"答案里不渲染】
+        # 这不是偷懒，是那个块确实没信息量。
+        #
+        # 画像意图下 _react 会追加一次 review_wordcloud，但它不传极性
+        # （画像要看全量，只统计差评会把正向行为证据整体抹掉）。
+        # 于是词云走 count 口径，出来的是 质量 1792 / 苹果 1500 / 裤子 1131 ——
+        # 商品名 + "质量"这种泛词。它既不是画像证据（画像块自己已经
+        # 逐条挂了原话），也不是抱怨点（那要问差评）。挂在这里只会
+        # 让读者以为"用户在夸质量"，而实际上"质量"在差评里一样高频。
+        #
+        # 判据：rank_by == 'count' 且没有明确极性 → 不出块。
+        # 保留数据（facts 里还在），只是不展示 —— 将来若要接"全量词云"
+        # 的独立入口，不用重新算一遍。
+        _wc_pol = (w or {}).get('scope', {}).get('polarity') if w else None
+        _wc_show = bool(w and w.get('ok')) and not (
+            w.get('rank_by') == 'count' and not _wc_pol
+            and state.get('intent') == 'persona')
+        if _wc_show:
+            items = w.get('items') or []
+            if items:
+                top_n = min(len(items), 24)
+                # 【标题里的极性必须读"实际生效的那个"，不能读用户原话】
+                # 这是前面"数字和标题矛盾"那个坑的同一个形状，只是换了一层：
+                #   · 用户在句子里没提差评/好评 → asked_polarity = None
+                #   · _args 在情感分析场景下把 polarity 补成「负向」
+                #   · 若标题仍用 asked_polarity，就会写着
+                #     "里最常被提到的词"（连"差评"两个字都没有），
+                #     而数据是差评词云 —— 文不对题，且看不出来错在哪。
+                # 工具返回的 scope.polarity 是真正下传的那个值，只信它。
+                _pol_eff = (w.get('scope') or {}).get('polarity') or _pol
+                _pol_txt = ('差评' if _pol_eff == '负向'
+                            else '好评' if _pol_eff == '正向' else '')
+                _rank_by = w.get('rank_by')
+                blocks.append({
+                    'type': 'wordcloud',
+                    # 【rank_by 决定标题怎么说，因为两种口径回答的是不同问题】
+                    # lift   → 按区分度排（"差评里比好评里常见多少倍"）
+                    # count  → 按频次排（商品名会霸榜）
+                    # 若都用同一句话，读者无法知道眼前这堆词是按什么排的，
+                    # 会误把"质量 1792"当成"抱怨最多的是质量"。
+                    #
+                    # 措辞上不再写"最突出的是"—— 那是 headline 的职责，
+                    # 块标题只负责说清"这是什么口径的词表"。
+                    # 两处都说"最突出"，读起来像复读。
+                    'title': ((f'{_pol_txt}高频词' if _pol_txt else '全部评论高频词')
+                              + ('（按区分度排序）' if _rank_by == 'lift'
+                                 else '（按出现次数排序）')),
+                    'rank_by': _rank_by or 'count',
+                    'polarity': _pol_eff or '',
+                    'rank_note': w.get('rank_note', ''),
+                    'compare_n': w.get('compare_n') or 0,
+                    'scope': w.get('scope', ''),
+                    'items': [{
+                        'word': i['word'],
+                        'count': i['count'],
+                        'lift': i.get('lift'),
+                        # 【原句必须跟着走】
+                        # 这是模块头那条"点不出来的词都是耍流氓"的落点。
+                        # 没有这句话，词云就只是个装饰。
+                        'quote': (i.get('quotes') or [''])[0][:70],
+                    } for i in items[:top_n]],
+                })
+                _words = '、'.join(i['word'] for i in items[:6])
+                if _rank_by == 'lift':
+                    segs.append(
+                        f'把这些{_pol_txt}评论的用词按"比另一类评论里常见多少倍"排序，'
+                        f'最突出的是：**{_words}**。'
+                        f'这个排法会自动滤掉商品名和"不错/不好"这类泛词——'
+                        f'它们在好评差评里一样常见，对定位问题没有帮助。')
+                else:
+                    # 【按频次排序时，必须自己先把这句话的局限说完】
+                    # 否则读者会顺理成章地理解成"用户最常提质量，说明质量最重要"。
+                    # 而实际原因是"质量"这个词在好评差评里都会出现 ——
+                    # 频次高不代表是问题点，这是两件事。
+                    segs.append(
+                        f'高频词前几位是：**{_words}**。'
+                        f'这一组按出现次数排，没有做区分度校正，'
+                        f'所以里面会混着商品名和泛泛的评价词——'
+                        f'它们说明不了问题在哪。要看抱怨点，得限定差评再排一次。')
+
+                # 覆盖率低时主动解释，别等用户问"为什么词这么碎"
+                if w.get('coverage_note'):
+                    caveats.append(w['coverage_note'])
+
+        # ---------- 画像 ----------
+        if p and p.get('ok'):
+            tops = p.get('top_signals') or []
+            if tops:
+                _ts = '、'.join(f'{t["signal"]}（{t["n"]:,} 条）' for t in tops[:3])
+                blocks.append({
+                    'type': 'persona',
+                    'title': f'用户画像 · 来自 {p["n"]:,} 条评论的语言证据',
+                    'groups': [{
+                        'group': g['group'],
+                        'desc': g['desc'],
+                        'items': [{
+                            'signal': it['signal'],
+                            'n': it['n'],
+                            'pct': it['pct'],
+                            'quote': (it['quotes'][0]['text'] if it['quotes'] else ''),
+                            'matched': (it['quotes'][0].get('matched', '')
+                                        if it['quotes'] else ''),
+                        } for it in g['items']],
+                    } for g in (p.get('groups') or [])],
+                    'cannot': p.get('cannot') or [],
+                })
+                segs.append(
+                    f'画像上，出现最多的语言证据是 {_ts}。'
+                    f'这些不是"推断出来的人群"，而是**说出来的场景**——'
+                    f'每一条都能点回原句核对。')
+                # 【cannot 不再往 caveats 里塞】
+                # 它已经在画像块内部渲染了（人读到画像时会看见），
+                # 再复制一份到页面底部的 caveats，结果是同一段话出现两遍：
+                # 一次在卡片里，一次在"已知局限"里。
+                # 重复不等于强调，它只是让页面看起来啰嗦，
+                # 而且会让人怀疑"是不是还有别的没说"。
+                #
+                # 【但"星级兜底"那条必须留在 caveats】
+                # 它不是画像的局限，是情感判定的口径说明，
+                # 影响的是上面那张 KPI 卡的数字，不属于画像块。
+
+        # ---------- 竞品对比 ----------
+        if c and c.get('ok'):
+            es = c.get('entities') or []
+            if es:
+                rows = []
+                for e in es:
+                    vs = e.get('vs_store') or {}
+                    if e['entity'] == (c.get('scope') or {}).get('store_name', '本店'):
+                        sig = '—'
+                    elif vs:
+                        sig = (f"{vs['diff_pp']:+.1f}pp "
+                               f"{'显著' if vs.get('significant') else '不显著'}")
+                    else:
+                        sig = '—'
+                    rows.append([
+                        e['entity'],
+                        f"{e['n']:,}",
+                        f"{e['neg_pct']*100:.1f}%",
+                        f"{e['mean_score']:+.2f}",
+                        sig,
+                        e.get('mode_zh') or '—',
+                    ])
+                blocks.append({
+                    'type': 'table',
+                    'title': '竞品对比（负评率由评论文本逐条判定）',
+                    'columns': ['实体', '评论数', '负评率', '平均情感',
+                                '与本店差异', '数据性质'],
+                    'rows': rows,
+                    'align': ['left', 'right', 'right', 'right', 'right', 'left'],
+                    'note': ('「与本店差异」是两比例 z 检验的结果，'
+                             'p<0.05 才标显著。不显著的差异可能只是抽样噪声，'
+                             '不该写进汇报。'),
+                })
+
+                sig_lower = [e for e in es
+                             if (e.get('vs_store') or {}).get('significant')
+                             and (e.get('vs_store') or {}).get('diff_pp', 0) < 0]
+                _store = next((e for e in es if e['entity'] == '本店'), None)
+                if _store:
+                    segs.append(
+                        f'竞品对比：本店负评率 {_store["neg_pct"]*100:.1f}%，'
+                        f'在 {len(es)} 家里排第 '
+                        f'{[x["entity"] for x in es].index(_store["entity"]) + 1} 低。'
+                        + (f'有 {len(sig_lower)} 家的负评率显著低于本店，'
+                           f'最明显的是{sig_lower[0]["entity"]}。'
+                           if sig_lower else
+                           '没有任何一家的负评率显著低于本店——'
+                           '这个维度上我们是领先的。'))
+
+            # 维度差异
+            ds = [x for x in (c.get('dim_spread') or []) if x['spread'] >= 0.10]
+            if ds:
+                _d = ds[0]
+                segs.append(
+                    f'差距最集中的维度是**{_d["label"]}**：'
+                    f'最差 {_d["worst"]} 达 {_d["max"]*100:.0f}%，'
+                    f'最好 {_d["best"]} 只有 {_d["min"]*100:.0f}%，'
+                    f'极差 {_d["spread"]*100:.0f} 个百分点。'
+                    f'这个差距不是全行业都差，是某几家自己的问题。')
+
+            # 特征词
+            cw = c.get('contrast') or {}
+            if cw.get('only_in_target'):
+                blocks.append({
+                    'type': 'contrast',
+                    'title': f'本店 vs {cw.get("benchmark", "")} 的用词差异',
+                    'scope': cw.get('compare_scope', ''),
+                    'ours': [{'word': x['word'], 'n': x['in_target'],
+                              'lr': x['log_ratio']}
+                             for x in cw['only_in_target'][:10]],
+                    'theirs': [{'word': x['word'], 'n': x['in_base'],
+                                'lr': x['log_ratio']}
+                               for x in cw['only_in_base'][:10]],
+                    'benchmark': cw.get('benchmark', ''),
+                })
+
+            caveats.append(c.get('note') or '')
+
+        # ---------- 采集器 ----------
+        # 【判据是"有没有 collectors 列表"，不是 col.get('ok')】
+        # 这里踩过一个坑：collector_status 返回的 data 是
+        #   {'collectors': rows, 'n_auto': 3}
+        # 里面压根没有 ok 字段（ok 在外层的 ToolResult 上）。
+        # 于是 col.get('ok') 恒为 None，这一整块在界面上永远不显示——
+        # 而且不报错、不影响标题（标题读的是 facts，另算一套），
+        # 表现为"问数据从哪来，答了句话，下面一片空白"。
+        # 教训：_absorb 存进去的是 d（内层 data），不是整个 ToolResult。
+        # 判断"有没有结果"要看内层的实际特征字段。
+        if col and col.get('collectors'):
+            cs = col.get('collectors') or []
+            if cs:
+                blocks.append({
+                    'type': 'table',
+                    'title': '评论数据的采集渠道与合规性',
+                    'columns': ['渠道', '自动化程度', '合规性', '状态'],
+                    'rows': [[x['title'], x['auto'], x['compliance'],
+                              x['available']] for x in cs],
+                    'align': ['left', 'left', 'left', 'left'],
+                    'note': ('平台页面抓取没有实现，原因写在 collectors.py 里：'
+                             '违约 + 代码寿命以周计 + 平台只展示前 N 页导致样本有偏。'),
+                })
+                segs.append(
+                    f'数据进来说明：目前 {len(cs)} 个渠道里，'
+                    f'能全自动的是公开语料采样；'
+                    f'店铺自己的评论走"平台后台导出 → 放进 inbox → 自动导入"，'
+                    f'这一步需要人工点导出，因为它要人的登录态——'
+                    f'而"代替人登录"正是爬虫越界的那条线。')
+
+        # ---------- 判定 ----------
+        head, badge = self._review_headline(state)
+        if not segs:
+            segs = ['这个范围下没有可用的评论数据。']
+
+        return {
+            'headline': head,
+            'badge': badge,
+            'summary': '\n\n'.join(segs),
+            'blocks': blocks,
+            'caveats': [c for c in caveats if c],
+            'week': None,
+        }
+
+    def _review_headline(self, state: dict) -> tuple[str, dict]:
+        """评论分析的标题。标题必须点出"哪个实体、什么范围"。"""
+        f = state['facts']
+        s = f.get('sentiment') or {}
+        c = f.get('competitor') or {}
+        p = f.get('persona') or {}
+        col = f.get('collectors') or {}
+
+        _ent = state.get('asked_entity') or '本店'
+        _cat = state.get('category')
+        _scope = f'{_ent}{_cat}类目' if _cat else _ent
+
+        if col and not s:
+            cs = col.get('collectors') or []
+            n_auto = sum(1 for x in cs if x['available'] != '不实现' and '全自动' in x['auto'])
+            return (f'评论数据有 {len(cs)} 个入口，其中 {n_auto} 个能全自动跑',
+                    {'label': '数据来源', 'level': 'info'})
+
+        if c and c.get('entities'):
+            es = c['entities']
+            store = next((e for e in es if e['entity'] == '本店'), None)
+            if store:
+                rank = [x['entity'] for x in es].index(store['entity']) + 1
+                worse = [e for e in es
+                         if (e.get('vs_store') or {}).get('significant')
+                         and (e.get('vs_store') or {}).get('diff_pp', 0) > 0]
+                return (f'本店负评率 {store["neg_pct"]*100:.1f}%，'
+                        f'在 {len(es)} 家里第 {rank} 低；'
+                        f'{len(worse)} 家显著更差',
+                        {'label': '竞品对比', 'level': 'info'})
+
+        if p and p.get('top_signals'):
+            t = p['top_signals'][0]
+            return (f'{_scope} 的用户最在意{t["signal"]}'
+                    f'（{t["n"]:,} 条评论提到，占 {t["pct"]*100:.1f}%）',
+                    {'label': '用户画像', 'level': 'info'})
+
+        if s:
+            neg = s.get('neg_pct') or 0
+            lvl = 'critical' if neg >= 0.25 else 'warn' if neg >= 0.10 else 'ok'
+            lab = '负面偏高' if neg >= 0.25 else '需关注' if neg >= 0.10 else '口碑良好'
+            return (f'{_scope} {s["n"]:,} 条评论里负向占 {neg*100:.1f}%，'
+                    f'{s.get("net_readable", "")}',
+                    {'label': lab, 'level': lvl})
+
+        # 【只有词云时也要给一句像样的标题】
+        # 实测用户问"差评都在说什么"，标题退化成"已完成评论分析"——
+        # 这是最偷懒的一种兜底：读者从标题看不出任何信息，
+        # 必须点开才知道系统答了什么。
+        # 词云类问题的答案本身就是那句"最突出的词是什么"，
+        # 标题应该直接把它端出来。
+        wc = f.get('wordcloud') or {}
+        _wi = wc.get('items') or []
+        if _wi:
+            _top = '、'.join(i['word'] for i in _wi[:3])
+            _pol_txt = ('差评' if state.get('asked_polarity') == '负向'
+                        else '好评' if state.get('asked_polarity') == '正向'
+                        else '评论')
+            return (f'{_scope} 的{_pol_txt}里，最突出的是「{_top}」',
+                    {'label': '高频词', 'level': 'info'})
+
+        return ('已完成评论分析', {'label': '完成', 'level': 'ok'})
+
     def _compose_reason_fix(self, state: dict) -> dict:
         """回答"某个退货原因该怎么解决"。
 
@@ -3533,6 +4469,21 @@ headline 的例子（照这个意思写，不要照抄字面）：
         play = f.get('playbook')
         ov = f.get('overview')
         cmp_ = f.get('compare')
+
+        # ---------- v3.1 评论分析：单独一条路径 ----------
+        # 【判据用"有没有结果"，不用 intent】
+        # 这两个条件不等价，而且用结果更可靠：
+        # 用户问"竞品的情感怎么样"，classify_intent 判成 competitor，
+        # 但 _react 可能追加了 review_wordcloud，
+        # 也可能因为竞品差异不显著什么都没追加。
+        # 只要碰过评论分析的工具，就走这条路径 ——
+        # 若用 intent 判断，一旦哪个意图分支漏了，答案就会掉进
+        # 周度诊断流程，产出一份"第 52 周退货率 x%"的无关报告。
+        # 这和当初"按原因治理"那个坑是同一类：判据要钉在事实上。
+        if (f.get('sentiment') or f.get('wordcloud')
+                or f.get('persona') or f.get('competitor')
+                or f.get('collectors')):
+            return self._compose_review(state)
 
         # ---------- 对比场景：单独一条路径 ----------
         # 【为什么单独 return，不往下面的大流程里塞 if】

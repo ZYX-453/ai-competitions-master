@@ -1,0 +1,104 @@
+{
+  "_meta": {
+    "purpose": "统一评论语料池的来源台账。分析层不读这个文件，它只用于回答\"这些数据是哪来的\"。",
+    "total": 17660,
+    "sources": [
+      "competitor",
+      "store"
+    ],
+    "built_at": "2026-11-01",
+    "field_policy": {
+      "public": [
+        "review_id",
+        "source",
+        "entity_id",
+        "entity_name",
+        "biz_category",
+        "review",
+        "rating",
+        "week",
+        "review_date",
+        "review_len",
+        "has_image"
+      ],
+      "audit_only": [
+        "review_id",
+        "label",
+        "cause_l1",
+        "cause_l2"
+      ],
+      "excluded": {
+        "price": "本店为实测成交价、竞品只有相对倍数，混成一列会失真",
+        "order_returned": "仅本店有，放进公共表会造成\"人人都有\"的错觉"
+      }
+    },
+    "same_entity_duplicated_text": 769
+  },
+  "batches": [
+    {
+      "source": "competitor",
+      "entity_name": "竞品A（同价位）",
+      "entity_id": "C_A",
+      "n": 1040,
+      "week_min": 1,
+      "week_max": 52,
+      "date_min": "2026-08-01",
+      "date_max": "2026-10-29",
+      "collected_at": "2026-10-30T00:00:00",
+      "mode": "batch_seed",
+      "compliance": "模拟竞品池（DGP 标定，非实时抓取）"
+    },
+    {
+      "source": "competitor",
+      "entity_name": "竞品B（高价位）",
+      "entity_id": "C_B",
+      "n": 1040,
+      "week_min": 1,
+      "week_max": 52,
+      "date_min": "2026-08-01",
+      "date_max": "2026-10-29",
+      "collected_at": "2026-10-30T00:00:00",
+      "mode": "batch_seed",
+      "compliance": "模拟竞品池（DGP 标定，非实时抓取）"
+    },
+    {
+      "source": "competitor",
+      "entity_name": "竞品C（低价走量）",
+      "entity_id": "C_C",
+      "n": 1040,
+      "week_min": 1,
+      "week_max": 52,
+      "date_min": "2026-08-01",
+      "date_max": "2026-10-29",
+      "collected_at": "2026-10-30T00:00:00",
+      "mode": "batch_seed",
+      "compliance": "模拟竞品池（DGP 标定，非实时抓取）"
+    },
+    {
+      "source": "competitor",
+      "entity_name": "竞品D（新锐内容型）",
+      "entity_id": "C_D",
+      "n": 1040,
+      "week_min": 1,
+      "week_max": 52,
+      "date_min": "2026-08-01",
+      "date_max": "2026-10-29",
+      "collected_at": "2026-10-30T00:00:00",
+      "mode": "batch_seed",
+      "compliance": "模拟竞品池（DGP 标定，非实时抓取）"
+    },
+    {
+      "source": "store",
+      "entity_name": "本店",
+      "entity_id": "STORE",
+      "n": 13500,
+      "week_min": 1,
+      "week_max": 52,
+      "date_min": "2025-11-03",
+      "date_max": "2026-11-01",
+      "collected_at": "2026-10-30T00:00:00",
+      "mode": "batch_seed",
+      "compliance": "本店自有监控数据"
+    }
+  ]
+}

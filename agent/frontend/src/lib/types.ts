@@ -91,6 +91,82 @@ export interface Block {
   [k: string]: unknown
 }
 
+/* -------------------------------------------------------------------------
+ * v3.1 评论分析四件套的 block
+ *
+ * 【为什么这几个要写具体类型，而通用 Block 保留了索引签名】
+ * 老的那几种块（kpi/bars/table/quotes）结构简单，前端取值时靠
+ * 少量 as 断言就够了。新的三种块内部有嵌套（画像的分组、对比的两侧），
+ * 靠 as 断言会在"后端改了字段名"时静默渲染成空白——不报错、不提示，
+ * 只是少了一块内容。上次采集器块就是这么消失的。
+ * 写具体类型能让 tsc 直接把这种错挡在编译期。
+ * ---------------------------------------------------------------------- */
+
+export interface WordCloudItem {
+  word: string
+  /** 在该范围内出现的评论数 */
+  count: number
+  /** log2 lift：本类出现率 ÷ 对照组出现率。无对照组时为 null */
+  lift?: number | null
+  /** 包含该词的第一条原句（已截断），用于悬停回溯 */
+  quote?: string
+}
+
+export interface WordCloudBlock {
+  type: 'wordcloud'
+  title?: string
+  /** 'lift' = 按区分度排序；'count' = 按出现次数排序 */
+  rank_by?: 'lift' | 'count'
+  /** 实际生效的极性（可能由后端按意图补齐，不等于用户原话） */
+  polarity?: string
+  rank_note?: string
+  /** 对照组样本量。为 0 表示这次没做区分度校正 */
+  compare_n?: number
+  scope?: unknown
+  items?: WordCloudItem[]
+}
+
+export interface PersonaItem {
+  signal: string
+  n: number
+  pct: number
+  /** 命中该信号的原话（已按命中词取窗口截断） */
+  quote?: string
+  /** 原话里命中的那个信号词，用于高亮 */
+  matched?: string
+}
+
+export interface PersonaGroup {
+  group: string
+  desc?: string
+  items?: PersonaItem[]
+}
+
+export interface PersonaBlock {
+  type: 'persona'
+  title?: string
+  groups?: PersonaGroup[]
+  /** 这份画像明确回答不了的问题（如年龄/性别/收入） */
+  cannot?: string[]
+}
+
+export interface ContrastItem {
+  word: string
+  n: number
+  /** 对数比率，用于决定条形长度 */
+  lr: number
+}
+
+export interface ContrastBlock {
+  type: 'contrast'
+  title?: string
+  /** 对比范围，如"数码类目内"。跨类目对比时这里会写明不可当经营差异读 */
+  scope?: string
+  ours?: ContrastItem[]
+  theirs?: ContrastItem[]
+  benchmark?: string
+}
+
 export interface AnswerEvent {
   headline: string
   badge: Badge
