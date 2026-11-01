@@ -118,4 +118,4 @@ desktop.ini
 .mypy_cache/
 .ruff_cache/
 .coverage
-htmlcov/
+htmlcov/_tmp_clone/
