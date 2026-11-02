@@ -416,10 +416,65 @@ class Event:
 # 问题解析
 # ---------------------------------------------------------------------------
 
+_CN_DIGIT = {'一': 1, '二': 2, '三': 3, '四': 4, '五': 5,
+             '六': 6, '七': 7, '八': 8, '九': 9}
+
+
+def _cn2int(s: str) -> int | None:
+    """中文数字 → 整数（1–99），也接受纯阿拉伯数字。
+
+    【为什么需要这个】
+    用户问「第三十周的数据指标有问题吗」时，系统返回的是第 44 周。
+    排查下来不是重定向逻辑的错——那段写得很清楚：
+    "用户点名了周次，就不许替他换题"。
+    错在**上游没认出"三十"**：正则只写了 \\d{1,2}，
+    于是 parse_week 返回 None，state['asked_week'] 是空的，
+    week_pinned_by_user 为 False，重定向按"用户没指定周"的路径正常执行了。
+
+    这是一个典型的"上游漏解析、下游正确逻辑跑错分支"：
+    所有代码都没报错，日志里也看不出异常，
+    唯一的症状是答案答的不是用户问的那一周。
+
+    【支持的写法】
+      十 → 10     十二 → 12     二十 → 20
+      三十 → 30   三十一 → 31   五十二 → 52
+    不支持 "两"（两周、两星期是模糊表述，不该落成第 2 周）。
+    """
+    s = s.strip()
+    if not s:
+        return None
+    if s.isdigit():
+        return int(s)
+    if '十' in s:
+        a, _, b = s.partition('十')
+        # "十" 自身 = 10；"十二" = 12；"二十" = 20；"三十一" = 31
+        tens = _CN_DIGIT.get(a, None) if a else 1
+        if tens is None:
+            return None
+        if not b:
+            return tens * 10
+        ones = _CN_DIGIT.get(b)
+        if ones is None:
+            return None
+        return tens * 10 + ones
+    if len(s) == 1:
+        return _CN_DIGIT.get(s)
+    return None
+
+
+# 周次的两个写法：阿拉伯数字，或中文数字（一 … 五十二）
+_NUM_PAT = r'(?:\d{1,2}|[一二三四五六七八九十]{1,3})'
+
 _WEEK_PATTERNS = [
-    r'第\s*(\d{1,2})\s*周',
+    rf'第\s*({_NUM_PAT})\s*周',
     r'[Ww]\s*(\d{1,2})\b',
+    # 【裸数字只认阿拉伯，"三十周"单独放一条】
+    # 中文数字不带"第"也说得通（"三十周的数据怎么样"），
+    # 但不能简单地把中文塞进这条：那样"这一周怎么样"里的"一周"
+    # 会被解析成第 1 周 —— 而它其实是"当前这一周"的意思。
+    # 负向断言把 这/那/某/每/上/下/两/几 开头的全部排除。
     r'(\d{1,2})\s*周',
+    rf'(?<![这那某每上下两三几])([一二三四五六七八九十]{{1,3}})\s*周',
 ]
 
 _PROMO_ALIAS = {
@@ -456,14 +511,26 @@ def parse_week(q: str) -> int | None:
     # 既没说清是哪一周，也没把用户问的那周数字摆出来。
     # 这里返回 -1 作为"最新一周"的哨兵，由调用方替换成真实的 max_week，
     # 避免把 52 硬编码进解析层（换数据就会错）。
-    if any(k in q for k in ('最新一周', '最近一周', '最新周', '这周', '本周', '上一周')):
+    #
+    # 【"这一周""当前周"也要收进来】
+    # 别名表原来只有"这周"，没有"这一周"——差一个字，行为完全不同：
+    # "这一周怎么样"解析不出周次 → 被当成"用户没指定" → 触发重定向到第 44 周。
+    # 而用户明明指的是当下这一周。
+    # 注意判断顺序：这几条必须在正则之前，
+    # 否则"这一周"里的"一周"会被当成第 1 周（下面那条中文裸数字模式已用
+    # 负向断言排除"这/那/某/每/上/下/两/几"开头，双保险）。
+    if any(k in q for k in ('最新一周', '最近一周', '最新周', '这周', '本周',
+                            '上一周', '当前周', '这一周', '这个礼拜', '本星期')):
         return -1
     for pat in _WEEK_PATTERNS:
         m = re.search(pat, q)
         if m:
-            try:
-                w = int(m.group(1))
-            except ValueError:
+            # 【这里必须过 _cn2int，不能直接 int()】
+            # 正则里现在允许中文数字（第三十周），而 int('三十') 会抛 ValueError。
+            # 一旦抛了、又被 except 吞掉，就回到"解析不出周次"的老路 ——
+            # 表面上是"继续试下一条正则"，实际是**静默退回重定向**。
+            w = _cn2int(m.group(1))
+            if w is None:
                 continue
             if 1 <= w <= 52:
                 return w
@@ -482,14 +549,40 @@ def parse_weeks(q: str) -> list[int]:
     用户问的是**对比**，得到的是一半的答案。
     这里返回全部周次（去重、保序、过滤越界），
     由调用方决定要不要走对比路径。
+    【第四版补的两处】
+      · 原来只扫 `第\\d{1,2}周` 一条正则，于是 "W30 和 W44 哪个严重"
+        返回空列表 —— parse_week 能认 W30，对比路径却不认，
+        同一条问题在两条路径上得出不同结论。
+      · 中文周号（第三十周、第三十二周）同样要认，
+        否则"第三十周和第四十四周比一比"会退化成单周问答。
     """
     out: list[int] = []
     lim = dataset_max_week()
-    for m in re.finditer(r'第\s*(\d{1,2})\s*周', q):
-        w = int(m.group(1))
-        if 1 <= w <= lim and w not in out:
-            out.append(w)
+    for pat in _WEEK_PATTERNS:
+        for m in re.finditer(pat, q):
+            w = _cn2int(m.group(1))
+            if w is None:
+                continue
+            if 1 <= w <= lim and w not in out:
+                out.append(w)
+    # 【按在句子里出现的先后排序，不按正则的匹配顺序】
+    # 上面是外层循环 patterns、内层 finditer，同一个周号可能被多条正则命中，
+    # 而不同正则之间的先后是"正则定义的顺序"而非"用户说的顺序"。
+    # 对比类文案里要写"你问的是第 30 周和第 44 周"，顺序错了读起来很别扭。
+    out.sort(key=lambda w: _week_first_pos(q, w))
     return out
+
+
+def _week_first_pos(q: str, w: int) -> int:
+    """某个周号在问题里第一次出现的位置，用于稳定排序。
+
+    找不到就排到最后（返回一个很大的数），不影响正确性。
+    """
+    for pat in _WEEK_PATTERNS:
+        for m in re.finditer(pat, q):
+            if _cn2int(m.group(1)) == w:
+                return m.start()
+    return 10 ** 6
 
 
 def dataset_max_week() -> int:
@@ -1379,7 +1472,20 @@ class Agent:
             #   "最新一周有问题吗" → 52 平平无奇 → 可以接着看真正异常的周
             # 之前没区分，把所有指到末周的提问都当成了"点名"，于是
             # E2 这类问法再也走不到重定向，答案永远停在"这一周没问题"。
-            state['facts']['week_pinned_by_user'] = bool(re.search(r'第\s*\d{1,2}\s*周', q))
+            #
+            # 【判据只能有一份：直接用 w，不要再写一条正则】
+            # 这里原来是 `bool(re.search(r'第\s*\d{1,2}\s*周', q))` ——
+            # parse_week 的第三份拷贝。加中文数字支持时改了 parse_week，
+            # 忘了改这一行，于是"第三十周"虽然被正确解析成 30、
+            # diagnose_week(week=30) 也确实跑了，
+            # 但 week_pinned_by_user 仍是 False，
+            # 重定向照样把答案换成第 44 周 —— 前面白改了。
+            # 更糟的是这个 bug 不看日志根本发现不了：
+            # 解析层、工具层、重定向层全都没报错。
+            #
+            # w > 0 等价于"用户报出了一个具体周号"：
+            #   None → 没提；-1 → "最新一周"（允许追下去）；-2 → 越界（早前已拦下）
+            state['facts']['week_pinned_by_user'] = (w is not None and w > 0)
 
         steps = self._plan(intent, state)
         yield Event('plan', {'steps': [TOOL_TITLE.get(s, s) for s in steps],
