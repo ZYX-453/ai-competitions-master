@@ -597,6 +597,29 @@ def dataset_max_week() -> int:
         return 52
 
 
+def week_raw(q: str) -> int | None:
+    """取问题里第一个周号，**不校验范围**。
+
+    【为什么不能复用 parse_week】
+    它对越界返回 -2（一个哨兵），而"越界答案"的文案里要写具体是第几周：
+    "数据里没有第 60 周"。拿到 -2 就没法写这句话。
+
+    【为什么不能在这里再写一条 re.search】
+    原来这里写的是 re.search(r'第\\s*(\\d{1,2})\\s*周', q) ——
+    第四份周次正则。对"第60周"能工作，对"第六十周"匹配不到，
+    于是答案会写成「数据里没有第 该周 周」，一句话里两个语病。
+    这是同一个 bug 的第四次复发：判据散在多处，改一处不通盘看就会漏。
+
+    现在只保留这一个"取原始周号"的入口，parse_week / parse_weeks
+    越界分支全部走它。
+    """
+    for pat in _WEEK_PATTERNS:
+        m = re.search(pat, q)
+        if m:
+            return _cn2int(m.group(1))
+    return None
+
+
 def parse_category(q: str) -> str | None:
     for c in ('服饰', '数码', '生鲜', '个护'):
         if c in q:
@@ -1245,19 +1268,20 @@ class Agent:
         # 这里不往下走，直接给一个说清楚原因的答案，并在正文里列出可选范围。
         if w == -2:
             lim = int(self.hub.latest_week)
-            asked = re.search(r'第\s*(\d{1,2})\s*周', q)
-            bad = asked.group(1) if asked else '该周'
+            # 【不要在这里再写一条正则】见 week_raw 的注释
+            _bad_w = week_raw(q)
+            bad = f'第 {_bad_w} 周' if _bad_w else '你提到的这个周次'
             yield Event('session', {
                 'question': q, 'intent': 'out_of_range', 'mode': self.mode,
                 'week_hint': None, 'category_hint': None,
                 'model': self.llm.model if self.llm else '确定性推理引擎 v1',
             })
             answer = {
-                'headline': f'数据里没有第 {bad} 周，无法作答',
+                'headline': f'数据里没有{bad}，无法作答',
                 'badge': {'label': '超出范围', 'level': 'warn'},
                 'summary': (
-                    f'你问的是第 {bad} 周，但这份数据只覆盖第 1–{lim} 周，'
-                    f'第 {bad} 周没有订单记录。\n\n'
+                    f'你问的是{bad}，但这份数据只覆盖第 1–{lim} 周，'
+                    f'{bad}没有订单记录。\n\n'
                     f'我不会拿别的一周来顶替——那样你会得到一份看着完整、'
                     f'但答的不是你问题的报告。\n\n'
                     f'可以这样问：第 {lim} 周（最新一周）、第 44 周（双11 促销周，'
