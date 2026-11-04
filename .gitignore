@@ -1,0 +1,165 @@
+# ---------------- Python ----------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+downloads/
+eggs/
+.eggs/
+lib60/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+venv/
+.venv/
+env/
+ENV/
+
+# 【dist/ 不能一刀切忽略】
+# 一般项目里 dist 是构建产物，属于生成物。
+# 但这个项目的后端 main.py 把 frontend/dist 挂成静态目录，
+# dist 进了仓库，clone 下来不装 node、不 build，直接 python -m uvicorn 就能跑。
+# 如果忽略掉，新环境第一次启动就得先 npm install（约 1-2 分钟且要能连 npm）。
+# 所以这里只忽略根目录和 scripts 下的 dist，前端那个**保留**。
+/dist/
+/scripts/dist/
+
+# ---------------- Node / 前端 ----------------
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+.vite/
+.eslintcache
+*.local
+
+# 【dist 这里要特殊说明】
+# 正常项目 dist 是构建产物，不该进仓库。
+# 但这个项目的后端把 frontend/dist 挂成静态目录，
+# 产物在仓库里，clone 下来不装 node 也能直接跑起来看效果。
+# 所以 dist 保留，只忽略 node_modules。
+# dist/
+
+# ---------------- 数据文件 ----------------
+# 【processed 必须进仓库，raw 不必】
+# 这个决定改过一次，理由值得写下来：
+#
+# 最初的想法是"数据是生成物，不该进仓库，clone 下来跑生成脚本就行"。
+# 但这会让**应用启动就失败**——data_hub 一加载就要读 returns.csv，
+# 没有数据文件，/api/health 直接抛异常。
+# 评审 clone 下来第一步就跑不起来，那这个仓库等于白推。
+#
+# 所以：
+#   · data/processed/  → **进仓库**（16MB，应用靠它直接跑起来）
+#   · data/raw/        → 不进（13MB 公开语料，只在"从零重新生成"时才需要）
+#
+# 想从零复现整条链路的人，按 README 里写的地址下载原始语料放回 data/raw 即可，
+# 种子固定，产出与仓库里这份完全一致。
+
+# 原始语料：公开数据集，不进仓库（README 里有下载地址）
+data/raw/
+
+# 历史数据快照（可重新生成，且改动会让仓库无谓膨胀）
+data/backup_v*/
+
+# 临时/中间文件
+data/processed/*.tmp
+data/processed/_tmp*
+*.parquet
+
+# ---------------- 调试产物 ----------------
+# 【这一条最重要】
+# backend/_tmp 里是浏览器 user-data-dir（几百 MB）、
+# SSE 抓包、截图中间产物。曾经占到 549MB。
+# 这类东西一旦进了仓库，历史里就永远擦不掉了。
+_tmp/
+.tmp_check/
+.tmp_npmtest/
+*.sse
+*.log
+uvicorn*.log
+llm_last_raw.json
+
+# 截图产物（保留 README 里正式的那几张，中间的不要）
+_tmp/shots/
+screenshots_tmp/
+
+# 【临时排查脚本 + 校验备份，不进仓库】
+# _probe/_shot/_bi_probe 是排查渲染/交互用的临时脚本，只对本机调试有意义，
+# 不是给人看的交付物；.bak_check 是 reason_kb.json 的逐字节重复备份。
+# 它们都不该进公开仓库（噪音 + 冗余），但按工作纪律**不删除文件本身**。
+agent/backend/_probe*.py
+agent/backend/_shot*.py
+agent/backend/_bi_probe.py
+agent/backend/_sb_probe.py
+agent/backend/_reflow_probe.py
+agent/backend/slice_shots.py
+*.bak_check
+
+# 【评论分析模块的截图产物】
+# outputs/review_blocks/ 里是 8 张 3.3MB 的过程截图，
+# README 一张都没引用（正式文档用的是 outputs/ 下那几份 html）。
+# 它们跟 _tmp/shots/ 是同一类东西：我用来核对渲染效果的，
+# 不是给人看的交付物。留在仓库里只会让 clone 变慢。
+outputs/review_blocks/
+
+# ---------------- 评论语料的真值文件 ----------------
+# 【这一条是数据隔离的底线，不是"瘦身"】
+# data/review_pool/_corpus_truth.csv 有 label / cause_l1 / cause_l2 三列，
+# 是情感判定和原因归类的**答案**。
+# corpus.csv 里物理上没有这三列（这也是 check_review_analytics 第 1 节的断言），
+# 但真值文件就躺在同一个目录下——一旦它进了仓库，
+# 任何人 clone 下来都会先看到答案，整套"从文本自己推结论"的论证就废了。
+#
+# 所以这里逐条列出，而不是写一个宽泛的 *_truth.csv：
+# 太宽的规则会顺手吃掉 data/processed/ 下那些**应该**进仓库的校验文件
+# （_verification.json、gold_standard_200.csv 都在那边）。
+data/review_pool/_corpus_truth.csv
+# 同一个坑的第二个文件：竞品语料的 truth_bucket 列（POS/NEG/NEU）。
+# 它躺在 data/processed/ 里，而那个目录整体是"要进仓库"的——
+# 如果只按目录判断就会漏掉它。名字带下划线前缀不是约定，是提示：
+# processed 下凡是 _ 开头的都是"校验用的中间答案"，不是分析输入。
+data/processed/_competitor_truth.csv
+# 当前用不到：分析永远只读 corpus.csv，真值只在 check 脚本里按需读
+# 如果哪天要对外发布真值样本，单独放一个明确的目录，不要解开这条。
+
+# ---------------- 密钥与配置 ----------------
+# 【绝对不能进仓库】
+# 这个项目用 CANYU_LLM_KEY 环境变量读 API Key，
+# 任何情况下都不许把 Key 写进文件再提交。
+.env
+.env.*
+!.env.example
+*.key
+secrets.json
+config.local.json
+
+# ---------------- 系统与编辑器 ----------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---------------- 工作记忆（绝不进仓库）----------------
+# .workbuddy/memory 是本地工作日志，含调试过程、踩坑记录，
+# 甚至历史 key 片段（如 2026-10-30.md）。纯内部信息，公开仓库绝不能带。
+.workbuddy/
+
+# ---------------- 工具链缓存 ----------------
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/_tmp_clone/

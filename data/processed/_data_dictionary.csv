@@ -1,0 +1,111 @@
+﻿table,field,type,description
+reviews_monitor.csv / reviews_train.csv,review_id,str,主键，M=监控集 T=训练集
+reviews_monitor.csv / reviews_train.csv,dataset,str,monitor / train
+reviews_monitor.csv / reviews_train.csv,sku_id,str,关联 sku_master
+reviews_monitor.csv / reviews_train.csv,biz_category,cat,服饰/数码/生鲜/个护
+reviews_monitor.csv / reviews_train.csv,review,text,真实评论文本，已脱敏
+reviews_monitor.csv / reviews_train.csv,rating,int,1-5星
+reviews_monitor.csv / reviews_train.csv,label,int,0=负面 1=正面（公开数据集人工标注）
+reviews_monitor.csv / reviews_train.csv,cause_l1,cat,一级问题域
+reviews_monitor.csv / reviews_train.csv,cause_l2,cat,二级归因 P1/P2/P3/I1/F1/F2/S1/S2/E1/X/POS/NEU
+reviews_monitor.csv / reviews_train.csv,price,float,售价（元）
+reviews_monitor.csv / reviews_train.csv,gross_margin,float,单件毛利额（元）
+reviews_monitor.csv / reviews_train.csv,quality_endow,float,"质量禀赋 N(0,1)，遗漏变量；同时驱动退货率与差评倾向"
+reviews_monitor.csv / reviews_train.csv,order_returned,int,该评论者订单是否退货（含选择偏差）
+reviews_monitor.csv / reviews_train.csv,return_amount,float,退货金额
+reviews_monitor.csv / reviews_train.csv,week,int,监控集 1-52；训练集 -156..-1（相对监控期起点的历史周）
+reviews_monitor.csv / reviews_train.csv,review_date,date,监控集 2025-11-03~2026-11-01；训练集 2022-11-05~2025-10-31
+reviews_monitor.csv / reviews_train.csv,review_len,int,评论字数
+reviews_monitor.csv / reviews_train.csv,has_image,int,是否带图
+panel_weekly.csv,sku_id,str,SKU 主键
+panel_weekly.csv,biz_category,cat,类目
+panel_weekly.csv,week,int,周次 1-52
+panel_weekly.csv,price,float,售价
+panel_weekly.csv,return_rate_latent,float,DGP 潜在退货倾向（logit 概率），连续恒有值，用于因果回归
+panel_weekly.csv,return_rate,float,会计口径 = returns/orders；orders=0 时为 NaN。含二项抽样噪声，直接回归会严重衰减（实测衰减 97%）
+panel_weekly.csv,dsr,float,店铺评分 3.0-4.98，受前两周退货率影响 λ1=1.30 λ2=0.55
+panel_weekly.csv,exposure,int,曝光量，受前两周/三周 DSR 影响 ω1=0.64 ω2=0.28
+panel_weekly.csv,visitors,int,访客 = exposure×CTR
+panel_weekly.csv,orders,int,订单 = visitors×CVR
+panel_weekly.csv,returns,int,"退货数 Binomial(orders, return_rate_latent)"
+panel_weekly.csv,gmv,float,成交额 = orders×price
+panel_weekly.csv,gross_profit,float,毛利额 = orders×gross_margin
+panel_weekly.csv,quality_endow,float,质量禀赋，与 SKU 主表一致
+panel_weekly.csv,promo_week,int,是否大促周(24/44/48)
+service_logs.csv,log_id,str,主键
+service_logs.csv,review_id,str,关联评论
+service_logs.csv,sku_id,str,SKU
+service_logs.csv,biz_category,cat,类目
+service_logs.csv,cause_l2,cat,归因编码
+service_logs.csv,price,float,售价
+service_logs.csv,gross_margin,float,单件毛利
+service_logs.csv,compensation,float,补偿金额，标准档位 0/5/10/15/20/30/50 元，永不超过单件毛利
+service_logs.csv,exp_eligible,int,是否进入完整 7 档随机试验（毛利≥50 元）。该子集内补偿与毛利正交 r=-0.008，用于无偏因果估计
+service_logs.csv,complaint_history,int,历史投诉次数 Poisson(0.7)；次数越多越难挽单（系数 -0.40）
+service_logs.csv,is_saved,int,是否挽单成功（结果变量）
+service_logs.csv,theta_true,float,策略用户比例真值（仅模拟可得）
+service_logs.csv,p_effective_true,float,有效挽单率真值
+service_logs.csv,turn_count,int,对话轮次 2-13
+service_logs.csv,first_reply_min,float,首次响应分钟
+service_logs.csv,satisfaction_after,int,处理后满意度1-5
+service_logs.csv,week,int,工单所属周次，与评论 week 对齐（同周或次周）
+service_logs.csv,log_date,date,工单日期，恒晚于评论日期 0-1 天
+returns.csv,return_id,str,"主键。全量导出 9,427 行，按 sku_id×week 聚合与 panel_weekly.returns 逐单元相等"
+returns.csv,sku_id,str,SKU
+returns.csv,biz_category,cat,类目
+returns.csv,week,int,周次
+returns.csv,return_date,date,退货日期，落在所属周窗口内
+returns.csv,return_reason_l1,cat,一级原因域
+returns.csv,return_reason_l2,cat,归因编码。分品类独立口径（RETURN_MIX），非差评归因分布
+returns.csv,return_reason_text,str,业务化退货原因
+returns.csv,return_amount,float,退货金额（= 该 SKU 单价）
+returns.csv,order_amount,float,原订单金额
+returns.csv,logistics_cost,float,逆向物流成本 8-22元
+returns.csv,restock_loss_rate,float,二次销售折损率 5%-35%
+returns.csv,is_resellable,int,是否可二次销售，按原因分层（F1破损6%/P1尺码86%/生鲜封顶8%）
+sku_master.csv,sku_id,str,主键
+sku_master.csv,biz_category,cat,类目
+sku_master.csv,price,float,售价
+sku_master.csv,margin_rate,float,毛利率 8%-62%
+sku_master.csv,gross_margin,float,单件毛利额
+sku_master.csv,quality_endow,float,"质量禀赋 N(0,1)"
+sku_master.csv,ctr_base,float,类目基准点击率
+sku_master.csv,cvr_base,float,类目基准转化率
+sku_master.csv,return_base,float,退货率基线，已进入面板 DGP（类目固定效应 + SKU 基线）
+sku_master.csv,launch_week,int,上架周次 1-21
+sku_master.csv,end_week,int,下架周次；35/158 个 SKU 在期中下架，面板与实际动销一致
+gold_standard_200.csv,review_id,str,关联**监控集**（与训练集零重叠）
+gold_standard_200.csv,source,str,采样来源，恒为 monitor
+gold_standard_200.csv,biz_category,cat,类目
+gold_standard_200.csv,review,text,真实评论原文
+gold_standard_200.csv,rating,int,星级
+gold_standard_200.csv,auto_label,cat,**已置空**。规则引擎输出不得作为标注答案，否则 κ/F1 虚高
+gold_standard_200.csv,annotator_A,str,标注员A填写（空）
+gold_standard_200.csv,annotator_B,str,标注员B填写（空）
+gold_standard_200.csv,agreed,str,是否一致，用于算kappa
+gold_standard_200.csv,final,str,裁决后金标准
+_verification.json,lambda1,object,一级传导 退货率→DSR，真值 1.30 / 估计 1.303 / 误差 0.3%
+_verification.json,lambda2,object,二阶滞后项，真值 0.55 / 估计 0.558 / 误差 1.5%
+_verification.json,omega1,object,二级传导 DSR→曝光（滞后2周），真值 0.64 / 估计 0.639 / 误差 0.2%
+_verification.json,omega2,object,三阶滞后项（滞后3周），真值 0.28 / 估计 0.245 / 误差 12.4%（达标）
+_verification.json,method_compare,object,Pooled OLS 偏差 4.9% vs TWFE 偏差 0.3%
+_verification.json,attenuation,object,测量误差衰减偏误：会计口径 λ1=0.038（误差97.1%）vs 潜在倾向 1.303（误差0.3%）
+_verification.json,placebo,object,安慰剂检验：打乱 SKU 标签后 λ1≈-0.003，t=0.34
+_verification.json,value,object,等效流量价值折算：退货率降 1pp 的年化 GMV 增量
+_verification.json,pass,bool,四个传导参数是否全部误差<15%（本次 4/4 通过）
+dgp_params.json,transmission,object,传导链真值：lambda1=1.30 / lambda2=0.55 / omega1=0.64 / omega2=0.28
+dgp_params.json,compensation,object,补偿机制真值：b0/b1/b2/b3、theta0/theta1/c0
+dgp_params.json,returns_detail,object,退货明细导出口径（全量 100%）
+dgp_params.json,review_distribution,object,监控集星级分布：1–2 星 3.93% / 3 星 5.27% / 4–5 星 90.80%；负面标签 label=0 占 4.60%
+dgp_params.json,business_scale,object,经营规模：158 SKU / 年订单 6.47 万 / 年 GMV 602 万 / 客单价 ¥93
+returns.csv,cogs,float,单件商品成本（元）= price − 单件毛利额；由该 SKU 当周 gross_profit÷orders 反推
+returns.csv,loss_amount,float,单笔退货实际损失（元）：可二次销售=物流+成本×折损率；不可=物流+成本全额。<b>按成本计提，非零售价</b>
+returns.csv,loss_basis,str,损失计提依据：折损 / 报废
+_verification.json,sample_n,int,TWFE 回归有效样本量（SKU×周，剔除首周滞后缺失）
+_verification.json,cluster_n,int,聚类稳健标准误的聚类数（按 sku_id 聚类）
+dgp_params.json,generated_at,str,数据生成时间戳
+dgp_params.json,seed,int,随机种子，保证完全可复现
+dgp_params.json,text_source,str,文本语料来源文件
+dgp_params.json,kept_categories,object,保留的 4 个品类及映射
+dgp_params.json,excluded_categories,object,剔除的品类及剔除理由（样本不足，不做无依据填充）
+dgp_params.json,note,str,数据集构建的总体口径说明

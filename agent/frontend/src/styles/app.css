@@ -1,0 +1,5740 @@
+/* ===========================================================================
+   差评炼金炉 · 设计系统 ｜ v4 黑白灰
+   ---------------------------------------------------------------------------
+   风格定位：单色数据驾驶舱。整个界面只有一个色相（中性灰），
+   层次、状态、焦点**全部靠亮度与明度差**区分，不靠颜色。
+
+   【为什么敢做纯灰阶】
+   一、灰阶的信息密度比多色更高。四个语义色同时出现时，读者要先记住
+      "红=坏、琥珀=待定、青=好"，才能开始读数据；纯灰阶把这一层认知成本
+      省掉了——亮就是重，暗就是轻，不需要学习。
+   二、彩色界面很难避免"配色像模板"。青绿+深蓝几乎是所有 AI 产品的默认皮肤。
+      去掉色相之后，剩下的只能靠间距、字重、对齐、层级撑住，
+      这些恰恰是"专业工具感"的真正来源。
+   三、印刷与投影仪友好。评审现场常投屏，多色在低质量投影上会糊成一团灰，
+      而灰阶本来就是灰，怎么投都不会失真。
+
+   【但语义色不能全砍】
+   这是这套系统唯一保留颜色的地方，理由不是审美而是**信息**：
+   · 热力图的红/青承载"偏离方向"。全灰之后就只剩"偏得多不多"，
+     分不出"恶化"还是"改善"——而这恰恰是归因诊断的结论本身。
+   · KPI 的退货损失必须是"警示"色。运营扫一眼就要知道这块要处理。
+   所以语义色保留，但做两件事让它不破坏灰阶：
+   1. **去饱和**：饱和红 #f2555a → 灰红 #b8615f（明度降、灰度提）
+   2. **压面积**：只出现在数字、圆点、1px 描边上，绝不铺底色块
+
+   【层次怎么拉】
+   不用阴影堆（灰底上的阴影几乎看不见），改用**明度阶梯 + 1px 描边**：
+     bg(最暗) → bg-sub → panel → panel-2 → raise(最亮)
+   相邻两级之间约 3–4% 明度差，够分辨，又不出现"一块块补丁"。
+   描边比填充低一级，形成"凹陷"而不是"贴纸"。
+
+   【灵动感从哪来】
+   三条：
+   1. 圆角。--r-sm 5→9 / --r 8→14 / --r-lg 11→20。灰阶画面本来就偏冷硬，
+      圆角是唯一不靠颜色就能软化观感的手段。
+   2. 过渡。所有可点元素都有 140–260ms 的缓动，且**分层**：
+      颜色先变（快），位移后到（慢），阴影最后（最慢）。
+      同一速度会让动效显得"整体平移"，分层才有"回应"的手感。
+   3. 悬停时的三重反馈：提亮 + 上浮 1px + 描边变亮。只做变色会显得死板，
+      只做位移会显得廉价，三个一起才有"面板被触碰"的物理感。
+   =========================================================================== */
+
+@font-face {
+  font-family: 'CJ Mono';
+  src: local('JetBrains Mono'), local('Cascadia Mono'), local('Consolas');
+}
+
+:root {
+  /* ---- 中性色阶：8 级，每级明度差 3–4% ---- */
+  --bg:        #0b0b0c;   /* 最底：页面背景 */
+  --bg-sub:    #101012;   /* 次级底：侧栏、表头 */
+  --panel:     #151517;   /* 卡片 */
+  --panel-2:   #1a1a1d;   /* 卡片内的次级块 */
+  --raise:     #212125;   /* 浮层 / tooltip */
+  --hover:     #26262b;   /* 悬停态 */
+
+  /* 【压暗遮罩：必须比 --bg 更深】
+     框选压暗一开始直接用了 --bg，实测几乎看不出来 ——
+     卡片是 #151517，--bg 是 #0b0b0c，只差 10 级亮度，
+     叠上去等于没压。遮罩要比卡片深足够多才看得出"这块被排除了"，
+     所以单独立一个变量，而不是复用一个语义不同的颜色。 */
+  --scrim:     rgba(0, 0, 0, .58);
+
+  /* ---- 描边：三级，越亮表示越靠前 ---- */
+  --line-soft: #1e1e21;
+  --line:      #27272b;
+  --line-hard: #35353b;
+
+  /* ---- 文字：五级，靠亮度分层，不用色偏 ----
+     【v4.1：整条阶梯上移】
+     灰阶方案最容易犯的错不是"颜色丑"，而是"看不见"。
+     第一版把 --fg-4 定在 #5a5a61 追求"弱"，结果实测对比度只有
+     2.88（WCAG 小字要求 4.5）—— 全站 74 处标签/单位/说明全部不达标。
+     这些不是装饰文字：\"口径：全部类目 · 显著性用双侧两比例 z 检验\"
+     这种句子读者必须能读清，否则整个结论的可信度无从判断。
+
+     调整后各级在 --bg 上的实测对比度：
+       --fg    17.6   （远超，主数字要够硬）
+       --fg-2  11.1
+       --fg-3   7.2
+       --fg-4   ~4.9   （刚过 4.5，但留了余量给 --panel 底）
+       --fg-5   3.4   （只用于占位符/刻度，不承载信息，WCAG 对此豁免）
+     相邻两级的比值都在 1.4 倍上下，层级仍然分得开 ——
+     只是整体抬亮，不是把四档压成一档。
+
+     【第二次微调：--fg-4 又被抬高 6 点】
+     第一轮调到 #80808a 之后审计还剩 3 处 4.2 左右的擦边项
+     （--panel-2 / --raise 这类更亮的底）。#80808a 在 #1e1e20 上只有
+     4.24，差 0.26。抬到 #86868f 后最亮底色上也有 4.5 以上。
+     这类"差一点点"最容易被放过，但它恰恰是最常出现的正文说明。 */
+  --fg:        #f2f2f3;   /* 主文本 / 关键数字 */
+  --fg-2:      #c2c2c8;   /* 正文 */
+  --fg-3:      #9c9ca4;   /* 次要 */
+  --fg-4:      #86868f;   /* 标签 / 单位 */
+  --fg-5:      #56565e;   /* 极弱：刻度线、占位 */
+
+  /* ---- "强调"不再是颜色，而是亮度 ----
+     accent 的含义变成"当前焦点"：近白。
+     它出现在选中态、关键数字、交互焦点上。
+     好处是——界面上任何"最亮的东西"自动就是注意力所在，
+     不需要读者另外记住哪种颜色代表重要。 */
+  --accent:      #f2f2f3;
+  --accent-2:    #d8d8dc;
+  --accent-dim:  rgba(255, 255, 255, 0.07);
+  --accent-line: rgba(255, 255, 255, 0.22);
+  --accent-glow: rgba(255, 255, 255, 0.10);
+
+  /* ---- 语义色：去饱和版，只在数据有方向时出现 ----
+     明度比原来的饱和色略低，混在灰阶里不会跳出来抢视线。 */
+  --bad:       #c26663;   /* 恶化 / 损失 / 异常 */
+  --bad-dim:   rgba(194, 102, 99, 0.13);
+  --bad-line:  rgba(194, 102, 99, 0.34);
+  --warn:      #b99a5b;   /* 待确认 / 幅度不足 */
+  --warn-dim:  rgba(185, 154, 91, 0.13);
+  --warn-line: rgba(185, 154, 91, 0.34);
+  --good:      #8e9c94;   /* 改善：只用一点点冷灰绿，几乎看不出是绿 */
+  --good-dim:  rgba(142, 156, 148, 0.13);
+  --info:      #7d8794;
+  --info-dim:  rgba(125, 135, 148, 0.13);
+
+  /* ---- 语义色"当文字用"时的提亮版 ----
+     同一个色值，做底色块和做文字的要求完全相反：
+     做底色块时 --bad (#c26663) 够用且不刺眼；
+     做文字压在自己的 --bad-dim 上时，对比度只剩 2.68（小字要 4.5）。
+     这是灰阶化之后最容易漏的一类：底色和字色是同一个变量，
+     减饱和度一起减，字就先看不清了。
+     所以给文字单独一组：亮度比底色版高 40% 左右，色相保持一致。 */
+  --bad-fg:    #e0a8a4;
+  --warn-fg:   #ddc48f;
+  --good-fg:   #b6c7be;
+  --info-fg:   #b9c1cb;
+  --info-line: rgba(125, 135, 148, 0.30);
+
+  /* ---- 圆角：比上一版整体放大，柔和观感的来源 ---- */
+  --r-xs: 6px;
+  --r-sm: 9px;
+  --r:    14px;
+  --r-lg: 20px;
+  --r-pill: 999px;
+
+  /* ---- 条形图的圆角：单独一个变量，就是为了不再分叉 ----
+     这个值被改过两次（3px → 6px）都是"某一处嫌方"引出的，
+     而每次只改了当时看到的那一处：主条形图改了，归因页的
+     瀑布 / 双向 / 堆叠份额漏到用户来提。
+     圆角不像颜色错那样会报错，它只会让人觉得"这图没做完"，
+     所以必须有一个共同出处 —— 加新图时直接引用它。
+     高度 10–16px 的条用 6px 即半个圆头；更矮的（4px 迷你条）
+     用 --r-pill，更方的大色块（树图格子）单独定，见 .bi-tree-c。 */
+  --r-bar: 6px;
+
+  /* ---- 色块的圆角：树图格子 / 带字热力格这类"挤在网格里的块" ----
+     比条小一档（4px）：块最矮只有 19–24px，6px 会变成胶囊，
+     而且块与块之间只隔 1–2px 缝，半径大了会在缝上"掐腰"。
+     这两处原本各写各的（3px / 3px），已经出现过一次"只改一处"的风险，
+     所以和 --r-bar 一样收成一个变量。
+
+     边界：这一档只管**里面要塞文字**的块（.bi-tree-c / .pg-heat-fill）。
+     纯色、不带字的小方块（.bi-heat-c 的 22px 色格、图例 swatch 2px）
+     保持小圆角 —— 那是"刻度"，放大就变成装饰了。 */
+  --r-cell: 4px;
+
+  --mono: 'CJ Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC',
+          'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+
+  /* ---- 阴影：灰底上阴影很难看见，所以只做"贴地"和"浮起"两种轻量 ----
+     真正的层次靠明度差与描边，阴影是锦上添花，不是主力。 */
+  --shadow-1: 0 1px 2px rgba(0, 0, 0, .5);
+  --shadow-2: 0 2px 8px rgba(0, 0, 0, .45), 0 1px 2px rgba(0, 0, 0, .4);
+  --shadow-3: 0 12px 40px -8px rgba(0, 0, 0, .72), 0 2px 8px rgba(0, 0, 0, .5);
+  --shadow-lift: 0 6px 20px -6px rgba(0, 0, 0, .55);
+
+  /* ---- 缓动：三条不同性格的曲线，按场景选 ----
+     exit   快出，用于 hover 结束、收起
+     --ease 通用，尾部舒展，像有惯性
+     spring 轻微回弹，用于"被按下"的确认感 */
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* ---- 统一时长：快到"没感觉"就是没反馈，慢到"等"就烦 ---- */
+  --t-fast: 140ms;
+  --t-mid: 220ms;
+  --t-slow: 320ms;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--sans);
+  font-size: 13.5px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* 【背景加一层极淡的径向光】
+     纯平的深灰会显得"空、像没加载完"。
+     一个 60% 不透明度的微光放在左上角，让画面有光源方向感，
+     但饱和度为零，不会引入任何色相 —— 灰阶画面要的正是这个。 */
+  background-image:
+    radial-gradient(1100px 620px at 18% -12%, rgba(255,255,255,.028), transparent 62%);
+  background-attachment: fixed;
+}
+
+/* 数字统一等宽：表格对齐是专业感最直接的来源 */
+.num, .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+::selection { background: rgba(255,255,255,.20); color: #fff; }
+
+/* 滚动条：细、暗、悬停才显形 —— 静止时不该有存在感 */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: #2a2a2f;
+  border-radius: var(--r-pill);
+  border: 2.5px solid var(--bg);
+  transition: background var(--t-fast) linear;
+}
+::-webkit-scrollbar-thumb:hover { background: #45454c; }
+
+/* ---------------------------------------------------------------- 布局 */
+.shell {
+  display: grid;
+  grid-template-columns: 268px minmax(0, 1fr) 340px;
+  grid-template-rows: 48px minmax(0, 1fr);
+  height: 100%;
+  background: var(--bg);
+}
+
+@media (max-width: 1280px) {
+  .shell { grid-template-columns: 240px minmax(0, 1fr); }
+  .rail-right { display: none; }
+}
+@media (max-width: 900px) {
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .rail-left { display: none; }
+}
+
+/* ---------------------------------------------------------------- 顶栏 */
+.topbar {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 16px;
+  background: var(--bg-sub);
+  border-bottom: 1px solid var(--line-soft);
+  position: relative;
+  z-index: 20;
+}
+
+.brand { display: flex; align-items: center; gap: 9px; }
+.brand-mark {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: 6px;
+  background: linear-gradient(150deg, var(--accent) 0%, var(--accent-2) 100%);
+  color: #0b0b0c;
+  font-weight: 800;
+  font-size: 12px;
+  box-shadow: 0 2px 8px -2px rgba(255,255,255,.5);
+}
+.brand-name { font-size: 13px; font-weight: 650; letter-spacing: .2px; }
+.brand-sep { color: var(--fg-4); margin: 0 2px; }
+.brand-sub { font-size: 12px; color: var(--fg-3); }
+
+.top-spacer { flex: 1; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 22px; padding: 0 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-family: var(--mono);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--fg-2);
+  white-space: nowrap;
+}
+.chip .dot { width: 5px; height: 5px; border-radius: 50%; background: var(--fg-4); }
+.chip.live .dot { background: var(--accent); box-shadow: 0 0 0 3px rgba(255,255,255,.15); }
+.chip.live { color: var(--accent); border-color: var(--accent-line); }
+
+/* ---------------------------------------------------------------- 左栏 */
+.rail-left {
+  border-right: 1px solid var(--line-soft);
+  background: var(--bg-sub);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.rail-head {
+  padding: 14px 14px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.rail-title {
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: .9px;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  margin-bottom: 10px;
+}
+
+.stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line-soft); border: 1px solid var(--line-soft); border-radius: var(--r); overflow: hidden; }
+.stat-cell { background: var(--panel); padding: 8px 10px; }
+.stat-k { font-size: 10px; color: var(--fg-4); letter-spacing: .29px; margin-bottom: 2px; }
+.stat-v { font-size: 13px; font-weight: 600; font-family: var(--mono); color: var(--fg); }
+.stat-v small { font-size: 9.5px; color: var(--fg-3); font-weight: 400; margin-left: 2px; }
+
+.rail-scroll { flex: 1; overflow-y: auto; padding: 12px 10px 20px; }
+
+.suggest {
+  width: 100%;
+  text-align: left;
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 8px 9px;
+  margin-bottom: 3px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-sm);
+  color: var(--fg-2);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background .13s, border-color .13s, color .13s;
+}
+.suggest:hover:not(:disabled) {
+  background: var(--panel);
+  border-color: var(--line);
+  color: var(--fg);
+}
+.suggest:disabled { opacity: .45; cursor: not-allowed; }
+.suggest .arrow {
+  color: var(--fg-4);
+  font-family: var(--mono);
+  font-size: 11px;
+  margin-top: 1px;
+  transition: transform .18s var(--ease), color .13s;
+}
+.suggest:hover .arrow { transform: translateX(2px); color: var(--accent); }
+
+/* ---------------------------------------------------------------- 主区 */
+.stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--bg);
+  position: relative;
+}
+
+.stage-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 26px 8px;
+  scroll-behavior: smooth;
+}
+
+/* 输入区：底部固定，上方渐隐让内容"沉下去" */
+.composer-wrap {
+  padding: 0 26px 16px;
+  background: linear-gradient(to bottom, transparent, var(--bg) 28px);
+}
+.composer {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: 8px 8px 8px 12px;
+  transition: border-color .15s, box-shadow .15s;
+  box-shadow: var(--shadow-2);
+}
+.composer:focus-within {
+  border-color: var(--accent-line);
+  box-shadow: 0 0 0 3px var(--accent-dim), var(--shadow-2);
+}
+.composer textarea {
+  flex: 1;
+  background: none;
+  border: none;
+  /* 【不要在这里写 outline: none】
+     这条规则的优先级是 0,1,1（class + 元素），比 :focus-visible 的 0,1,0 高，
+     会把全局焦点环整个盖掉 —— 输入框被 Tab 聚焦时一点反馈都没有。
+     而且它本来就是多余的：上面 :focus { outline: none } 已经清掉了。
+     删掉之后 textarea 的聚焦反馈来自两处叠加：
+        · 自己 :focus-visible 的白色 outline（offset 2px）
+        · 父容器 .composer:focus-within 的边框提亮 + 3px 外环
+     两者叠加在深底上非常明确，不会花。 */
+  resize: none;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13.5px;
+  line-height: 1.55;
+  max-height: 120px;
+  padding: 4px 0;
+}
+.composer textarea::placeholder { color: var(--fg-4); }
+
+.send-btn {
+  flex-shrink: 0;
+  width: 32px; height: 32px;
+  display: grid; place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent);
+  cursor: pointer;
+  transition: background .14s, transform .1s, opacity .14s;
+}
+.send-btn:hover:not(:disabled) { background: rgba(255,255,255,.2); }
+.send-btn:active:not(:disabled) { transform: scale(.94); }
+.send-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.hint-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-top: 7px; padding: 0 3px;
+  font-size: 10.5px; color: var(--fg-4);
+  font-family: var(--mono);
+}
+.hint-row kbd {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--fg-3);
+}
+
+/* ---------------------------------------------------------------- 空状态 */
+.empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 560px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+.empty-eyebrow {
+  font-size: 10.5px; letter-spacing: 1.4px; text-transform: uppercase;
+  color: var(--accent); font-weight: 650; margin-bottom: 12px;
+}
+.empty-title {
+  font-size: 25px; font-weight: 620; line-height: 1.34;
+  letter-spacing: -.3px; margin: 0 0 12px;
+  color: var(--fg);
+}
+.empty-title em {
+  font-style: normal;
+  color: var(--accent);
+}
+.empty-desc {
+  font-size: 13.5px; color: var(--fg-2); line-height: 1.72;
+  margin: 0 0 22px; max-width: 480px;
+}
+.empty-desc b { color: var(--fg); font-weight: 600; }
+
+.cap-list { display: grid; gap: 7px; margin-bottom: 22px; }
+.cap {
+  display: flex; gap: 10px; align-items: flex-start;
+  padding: 9px 11px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+}
+.cap-ico {
+  flex-shrink: 0;
+  width: 20px; height: 20px;
+  display: grid; place-items: center;
+  border-radius: 5px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 10px;
+  font-family: var(--mono);
+  font-weight: 700;
+  margin-top: 1px;
+}
+.cap-body { font-size: 12.5px; color: var(--fg-2); line-height: 1.55; }
+.cap-body b { color: var(--fg); font-weight: 600; display: block; margin-bottom: 1px; font-size: 12.5px; }
+
+/* ---------------------------------------------------------------- 问题气泡 */
+.q-row { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+.q-bubble {
+  max-width: 78%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg) var(--r-lg) 3px var(--r-lg);
+  padding: 9px 13px;
+  font-size: 13.5px;
+  color: var(--fg);
+  box-shadow: var(--shadow-1);
+}
+
+/* ---------------------------------------------------------------- 标签 */
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  height: 19px; padding: 0 7px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: .2px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+/* 【v4：徽章从"彩色块"降级为"灰块 + 微色温字 + 色点"】
+   原来四个徽章各有饱和底色，一屏出现三个就是三块彩色补丁。
+   现在统一灰底，语义靠三样东西表达，都不占面积：
+     · 左边一个小色点（唯一的高饱和像素，直径 5px）
+     · 文字带克制色温（近白偏暖/偏冷）
+     · 边框比常规略亮一级 */
+.badge { position: relative; padding-left: 18px; }
+.badge::before {
+  content: '';
+  position: absolute;
+  left: 7px; top: 50%;
+  width: 5px; height: 5px;
+  border-radius: 50%;
+  transform: translateY(-50%);
+}
+.badge.critical { background: var(--panel-2); color: var(--bad-fg); border-color: var(--line-hard); }
+.badge.critical::before { background: var(--bad); }
+.badge.warn     { background: var(--panel-2); color: var(--warn-fg); border-color: var(--line-hard); }
+.badge.warn::before { background: var(--warn); }
+.badge.ok       { background: var(--panel-2); color: var(--good-fg); border-color: var(--line-hard); }
+.badge.ok::before { background: var(--good); }
+.badge.info     { background: var(--panel-2); color: var(--info-fg); border-color: var(--line-hard); }
+.badge.info::before { background: var(--info); }
+
+/* ---------------------------------------------------------------- 卡片 */
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.card-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line-soft);
+  background: linear-gradient(to bottom, rgba(255,255,255,.012), transparent);
+}
+.card-title {
+  font-size: 11px; font-weight: 650; letter-spacing: .7px;
+  text-transform: uppercase; color: var(--fg-3);
+  margin: 0;
+}
+.card-head .spacer { flex: 1; }
+.card-body { padding: 14px; }
+
+/* ---------------------------------------------------------------- KPI */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.kpi {
+  background: var(--panel-2);
+  padding: 10px 12px 11px;
+}
+.kpi-k {
+  font-size: 10px; color: var(--fg-4); letter-spacing: .3px;
+  margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.kpi-v {
+  font-size: 19px; font-weight: 620; font-family: var(--mono);
+  letter-spacing: -.5px; line-height: 1.15; color: var(--fg);
+}
+.kpi-d {
+  font-size: 10.5px; font-family: var(--mono);
+  margin-top: 3px; color: var(--fg-3);
+}
+.kpi.bad  .kpi-v { color: var(--bad); }
+.kpi.good .kpi-v { color: var(--good); }
+
+/* ---------------------------------------------------------------- 时间轴 */
+.tl { position: relative; padding-left: 22px; }
+.tl::before {
+  content: '';
+  position: absolute;
+  left: 6px; top: 6px; bottom: 6px;
+  width: 1px;
+  background: linear-gradient(to bottom, var(--line-hard), var(--line-soft) 70%, transparent);
+}
+.tl-item { position: relative; padding-bottom: 13px; }
+.tl-item:last-child { padding-bottom: 0; }
+.tl-dot {
+  position: absolute;
+  left: -22px; top: 3px;
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 1.5px solid var(--line-hard);
+  display: grid; place-items: center;
+}
+.tl-dot i { width: 4px; height: 4px; border-radius: 50%; background: var(--fg-4); display: block; }
+.tl-item.bad  .tl-dot { border-color: var(--bad);  } .tl-item.bad  .tl-dot i { background: var(--bad); }
+.tl-item.warn .tl-dot { border-color: var(--warn); } .tl-item.warn .tl-dot i { background: var(--warn); }
+.tl-item.info .tl-dot { border-color: var(--info); } .tl-item.info .tl-dot i { background: var(--info); }
+.tl-l {
+  font-size: 10px; font-weight: 650; letter-spacing: .55px;
+  text-transform: uppercase; color: var(--fg-4);
+  margin-bottom: 2px;
+}
+.tl-t { font-size: 12.5px; color: var(--fg-2); line-height: 1.62; }
+.tl-t b { color: var(--fg); font-weight: 600; font-family: var(--mono); }
+
+/* ---------------------------------------------------------------- 分解条 */
+.decomp { padding: 2px 0 0; }
+.decomp-top {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 9px;
+}
+/* 21px 与 KPI 卡的主数字几乎同级，会跟"结论区"抢焦点。
+   这里是过程量（拆解结果），不是最终结论，降一档到 17px 更符合信息层级。 */
+.decomp-total { font-family: var(--mono); font-size: 17px; font-weight: 650; color: var(--bad); letter-spacing: -.3px; }
+.decomp-total small { font-size: 11px; color: var(--fg-4); font-weight: 400; margin-left: 4px; letter-spacing: 0; }
+
+.stack {
+  display: flex; height: 26px; border-radius: var(--r-sm);
+  overflow: hidden; background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+}
+.stack-seg {
+  display: grid; place-items: center;
+  /* 多段时条内要写类目名，中文标签需要呼吸感，所以加左右内边距并允许裁切 */
+  padding: 0 6px;
+  overflow: hidden; white-space: nowrap;
+  font-size: 10px; font-family: var(--mono); font-weight: 600;
+  color: #0b0b0c;
+  transition: filter .15s;
+  min-width: 3px;
+}
+.stack-seg.primary { background: linear-gradient(180deg, var(--accent), var(--accent-2)); }
+/* 深色底上必须用亮字：沿用 #0b0b0c 会让灰段里的文字彻底看不见 */
+.stack-seg.muted   { background: #33333a; color: var(--fg-2); }
+.stack-seg:hover { filter: brightness(1.15); }
+
+.legend { display: flex; gap: 14px; margin-top: 8px; flex-wrap: wrap; }
+.legend-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--fg-3); }
+.legend-swatch { width: 8px; height: 8px; border-radius: 2px; }
+.legend-item b { color: var(--fg-2); font-family: var(--mono); font-weight: 600; }
+
+/* ---------------------------------------------------------------- 表格 */
+.tbl-wrap { overflow-x: auto; margin: 0 -14px; padding: 0 14px; }
+table.tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.tbl th {
+  text-align: right;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--fg-4);
+  padding: 0 10px 7px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+.tbl th:first-child, .tbl td:first-child { text-align: left; padding-left: 0; }
+.tbl th:last-child, .tbl td:last-child { padding-right: 0; }
+.tbl td {
+  padding: 7px 10px;
+  text-align: right;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--fg-2);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.tbl tbody tr:last-child td { border-bottom: none; }
+.tbl tbody tr:hover td { background: rgba(255,255,255,.018); }
+.tbl td:first-child { color: var(--fg); font-family: var(--sans); font-weight: 500; }
+
+/* ---------------------------------------------------------------- 条形 */
+.bars { display: grid; gap: 9px; }
+.bar-row { display: grid; grid-template-columns: 96px 1fr; gap: 10px; align-items: center; }
+.bar-l { font-size: 11.5px; color: var(--fg-2); text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar-track { position: relative; height: 20px; background: var(--panel-2); border-radius: var(--r-bar); overflow: hidden; }
+.bar-fill {
+  position: absolute; inset: 0 auto 0 0;
+  background: linear-gradient(90deg, rgba(255,255,255,.28), rgba(255,255,255,.5));
+  border-radius: var(--r-bar);
+  transition: width .5s var(--ease);
+}
+.bar-meta {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 7px;
+  font-size: 10.5px;
+  font-family: var(--mono);
+  color: var(--fg-2);
+  pointer-events: none;
+}
+.bar-meta .pc { color: var(--fg); font-weight: 600; }
+
+/* ---------------------------------------------------------------- 引用 */
+.quotes { display: grid; gap: 8px; }
+.quote {
+  border-left: 2px solid var(--line-hard);
+  padding: 3px 0 3px 11px;
+}
+.quote:hover { border-left-color: var(--accent-line); }
+.quote-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; color: var(--fg-4);
+  font-family: var(--mono);
+  margin-bottom: 3px;
+}
+.stars { color: var(--bad); letter-spacing: -1px; font-size: 9px; }
+.quote-t { font-size: 12.5px; color: var(--fg-2); line-height: 1.6; }
+
+/* ===========================================================================
+   评论分析四件套（v3.1）
+   ---------------------------------------------------------------------------
+   这三块和上面那些图表的区别：它们的内容是**文本**，不是数字序列。
+   数字可以靠坐标轴传达，文本只能靠排版层级。所以这里的设计重点
+   不是"画得好看"，是让"词 → 次数 → 区分度 → 原话"这条证据链
+   在视觉上不中断：读者从左边扫到右边，应该能一路走到底，
+   而不是在某个数字前停住、不知道该往哪看。
+
+   颜色只表达一件事：这一格是"我们的"还是"对方的"、
+   "抱怨"还是"正常"。没有装饰性用色。
+   =========================================================================== */
+
+/* ------------------------------------------------------ 词云（横向条形） */
+.wc-row {
+  display: grid;
+  /* 词 | 条 | 次数 | lift
+     固定列宽而不是 fr：中文词长度不一，用 fr 会让每一行的条起点
+     都不一样，扫视时完全无法纵向比较长度。 */
+  grid-template-columns: 84px 1fr 42px 46px;
+  gap: 9px;
+  align-items: center;
+  padding: 2px 0;
+  border-radius: var(--r-sm);
+}
+.wc-row:hover { background: rgba(255, 255, 255, .022); }
+
+.wc-word {
+  font-size: 12px;
+  color: var(--fg);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: .2px;
+}
+.wc-track {
+  height: 13px;
+  background: var(--panel-2);
+  /* 13px 高 → 和 .bar-track 同一档，走 --r-bar。
+     这里原来是 2px：同样的"细长条"，主条形图 6px、词云条 2px，
+     并排放着就是"一个打磨过、一个没打磨"。 */
+  border-radius: var(--r-bar);
+  overflow: hidden;
+}
+.wc-fill {
+  height: 100%;
+  /* 【v4：问答页词云条 —— 三档灰，按数值分级（见 Blocks.tsx 的 is-hi/is-mid/is-lo）】
+     原来是统一红条：一屏十几个词全是红的，既没有区分度，又让灰阶界面破功。
+     分级之后"最重的那几个抱怨"自己会亮起来，不需要读者比长度。 */
+  background: linear-gradient(90deg, rgba(140,140,146,.26), rgba(140,140,146,.40));
+  border-radius: var(--r-bar);
+  transition: width .45s var(--ease);
+}
+.wc-n {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-2);
+  text-align: right;
+}
+.wc-lift {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--accent);
+  text-align: right;
+  /* 虚线右边框，暗示"这一列是另外一种量纲"，
+     避免被误读成"次数的一部分" */
+  border-left: 1px dashed var(--line);
+  padding-left: 7px;
+}
+
+.wc-sample {
+  margin-top: 11px;
+  padding: 8px 10px;
+  background: var(--bg-sub);
+  border-left: 2px solid var(--bad-line);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  display: grid;
+  gap: 3px;
+}
+.wc-sample-k {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--bad);
+  letter-spacing: .3px;
+}
+.wc-sample-t {
+  font-size: 11.5px;
+  color: var(--fg-3);
+  line-height: 1.65;
+}
+
+/* ------------------------------------------------------ 用户画像 */
+.ps-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.ps-group {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: .3px;
+  flex-shrink: 0;
+}
+.ps-desc {
+  font-size: 10.5px;
+  color: var(--fg-4);
+  line-height: 1.5;
+}
+
+.ps-item { display: grid; gap: 4px; }
+.ps-top {
+  display: grid;
+  grid-template-columns: 96px 1fr 76px;
+  gap: 9px;
+  align-items: center;
+}
+.ps-sig {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 4px 高的细条：用 --r-pill（半圆头）。
+   这里原来是 2px —— 4px 高的条上 2px 和 pill 渲染结果一样，
+   但写死 2px 的话，将来 --r-pill 一改这三档（ps / ct / pg-bar）就又分叉了。 */
+.ps-bar {
+  height: 4px;
+  background: var(--panel-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.ps-bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent-line);
+  border-radius: var(--r-pill);
+  transition: width .45s var(--ease);
+}
+.ps-n {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-2);
+  text-align: right;
+}
+.ps-n small {
+  font-size: 9.5px;
+  color: var(--fg-4);
+  margin-left: 5px;
+}
+
+.ps-quote {
+  /* 缩进到和信号名同一条竖线上，形成"结论 ← 证据"的从属关系 */
+  margin-left: 105px;
+  font-size: 11px;
+  color: var(--fg-3);
+  line-height: 1.6;
+  padding-left: 9px;
+  border-left: 1px solid var(--line);
+}
+.ps-hit {
+  font-style: normal;
+  color: var(--warn);
+  background: var(--warn-dim);
+  padding: 0 2px;
+  border-radius: 2px;
+  font-weight: 500;
+}
+
+.ps-cannot {
+  margin-top: 14px;
+  padding: 9px 11px;
+  background: var(--bg-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+}
+.ps-cannot-h {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--warn);
+  margin-bottom: 5px;
+  letter-spacing: .2px;
+}
+.ps-cannot ul {
+  margin: 0;
+  padding-left: 15px;
+  display: grid;
+  gap: 3px;
+}
+.ps-cannot li {
+  font-size: 10.5px;
+  color: var(--fg-3);
+  line-height: 1.6;
+}
+
+/* ------------------------------------------------------ 用词差异 */
+.ct-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.ct-side.ours { /* 本店在左，对标在右——符合"我们 vs 他们"的阅读顺序 */ }
+.ct-h {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-3);
+  margin-bottom: 7px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.ct-side.ours .ct-h { color: var(--accent); }
+.ct-side.theirs .ct-h { color: var(--info); }
+
+.ct-row {
+  display: grid;
+  grid-template-columns: 70px 1fr 34px;
+  gap: 7px;
+  align-items: center;
+  padding: 1.5px 0;
+}
+.ct-w {
+  font-size: 11px;
+  color: var(--fg-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* 同上：4px 细条统一 --r-pill，不要各写各的（原来是 2px） */
+.ct-bar {
+  height: 4px;
+  background: var(--panel-2);
+  border-radius: var(--r-pill);
+  overflow: hidden;
+}
+.ct-bar i {
+  display: block;
+  height: 100%;
+  border-radius: var(--r-pill);
+  transition: width .45s var(--ease);
+}
+.ct-side.ours .ct-bar i { background: var(--accent-line); }
+.ct-side.theirs .ct-bar i { background: var(--info-line); }
+.ct-n {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--fg-4);
+  text-align: right;
+}
+
+/* ---------------------------------------------------------------- 动作 */
+.acts { display: grid; gap: 8px; }
+.act {
+  display: grid;
+  grid-template-columns: 20px 1fr;
+  gap: 10px;
+  padding: 10px 11px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  transition: border-color .14s, background .14s;
+}
+.act:hover { border-color: var(--line-hard); background: var(--raise); }
+.act-n {
+  width: 18px; height: 18px;
+  display: grid; place-items: center;
+  border-radius: 4px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 1px;
+}
+.act-a { font-size: 12.5px; color: var(--fg); line-height: 1.55; margin-bottom: 5px; }
+.act-tags { display: flex; gap: 5px; flex-wrap: wrap; }
+.tag {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  color: var(--fg-3);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+.tag.k { color: var(--fg-4); border-color: transparent; background: transparent; padding-left: 0; }
+
+/* ---------------------------------------------------------------- 结论 */
+.verdict {
+  border-radius: var(--r-lg);
+  border: 1px solid var(--accent-line);
+  background: linear-gradient(160deg, rgba(255,255,255,.055), rgba(255,255,255,.012) 55%, transparent);
+  padding: 15px 16px;
+  margin-bottom: 12px;
+}
+.verdict-head {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin-bottom: 9px;
+}
+.verdict-h {
+  font-size: 16px; font-weight: 620; line-height: 1.42;
+  letter-spacing: -.15px; color: var(--fg); margin: 0; flex: 1;
+}
+.verdict-body { font-size: 12.5px; color: var(--fg-2); line-height: 1.78; }
+.verdict-body b { color: var(--fg); font-weight: 600; }
+/* 段落之间留出呼吸。12px 是经验值：再小段落就粘成一块，
+   再大就把正文撑得比标题还醒目，主次颠倒。 */
+.verdict-p { margin: 0 0 9px; }
+.verdict-p:last-child { margin-bottom: 0; }
+
+/* 局限提示：明确告诉用户"这里我不可靠"，比藏着更专业 */
+.caveat {
+  border: 1px dashed var(--line);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  background: rgba(0,0,0,.18);
+}
+.caveat-h {
+  font-size: 10px; font-weight: 650; letter-spacing: .7px;
+  text-transform: uppercase; color: var(--fg-4);
+  margin-bottom: 6px; display: flex; align-items: center; gap: 5px;
+}
+.caveat ul { margin: 0; padding-left: 15px; }
+.caveat li { font-size: 11.5px; color: var(--fg-3); line-height: 1.62; margin-bottom: 3px; }
+.caveat li:last-child { margin-bottom: 0; }
+
+/* ---------------------------------------------------------------- 推理链 */
+.chain-card { margin-bottom: 12px; }
+.steps { display: grid; gap: 0; }
+
+.step {
+  border-bottom: 1px solid var(--line-soft);
+  animation: stepIn .32s var(--ease) both;
+}
+.step:last-child { border-bottom: none; }
+@keyframes stepIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.step-main {
+  display: grid;
+  grid-template-columns: 22px minmax(0,1fr) auto;
+  gap: 10px;
+  align-items: start;
+  padding: 10px 14px;
+  cursor: pointer;
+  transition: background .13s;
+}
+.step-main:hover { background: rgba(255,255,255,.014); }
+
+.step-ico {
+  width: 20px; height: 20px;
+  border-radius: 5px;
+  display: grid; place-items: center;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--fg-3);
+  margin-top: 1px;
+}
+.step.running .step-ico {
+  color: var(--accent);
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+}
+.step.done .step-ico { color: var(--accent); border-color: var(--accent-line); }
+.step.fail .step-ico { color: var(--bad); border-color: var(--bad-line); background: var(--bad-dim); }
+
+.step-title { font-size: 12.5px; font-weight: 550; color: var(--fg); line-height: 1.45; }
+.step-tool {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg-4);
+  margin-left: 6px;
+  font-weight: 400;
+}
+.step-sum {
+  font-size: 11.5px;
+  color: var(--fg-3);
+  font-family: var(--mono);
+  margin-top: 3px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+.step-right { display: flex; align-items: center; gap: 7px; padding-top: 1px; }
+.step-ms { font-size: 10px; font-family: var(--mono); color: var(--fg-4); }
+
+.spinner {
+  width: 11px; height: 11px;
+  border: 1.5px solid var(--line-hard);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* 证据抽屉：默认收起，点开才看得到"扫了多少行、怎么算的" */
+.evidence {
+  margin: 0 14px 10px 46px;
+  padding: 9px 11px;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  animation: stepIn .2s var(--ease) both;
+}
+.ev-row { display: grid; grid-template-columns: 78px 1fr; gap: 8px; padding: 3px 0; }
+.ev-k {
+  font-size: 9.5px; letter-spacing: .4px; text-transform: uppercase;
+  color: var(--fg-4); font-family: var(--mono); padding-top: 1px;
+}
+.ev-v { font-size: 11px; color: var(--fg-2); font-family: var(--mono); line-height: 1.55; word-break: break-word; }
+.ev-v b { color: var(--accent); font-weight: 600; }
+
+/* 思考气泡 */
+.thought {
+  display: flex; gap: 9px;
+  padding: 9px 14px;
+  background: rgba(125,135,148,.035);
+  border-left: 2px solid rgba(125,135,148,.4);
+  font-size: 12px;
+  color: var(--fg-2);
+  line-height: 1.68;
+  animation: stepIn .3s var(--ease) both;
+}
+.thought-l {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .6px;
+  color: var(--info); font-family: var(--mono);
+  white-space: nowrap; padding-top: 2px;
+}
+
+/* ---------------------------------------------------------------- 右栏 */
+.rail-right {
+  border-left: 1px solid var(--line-soft);
+  background: var(--bg-sub);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rr-head {
+  padding: 12px 14px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  display: flex; align-items: center; gap: 8px;
+}
+.rr-title {
+  font-size: 10.5px; font-weight: 650; letter-spacing: .9px;
+  text-transform: uppercase; color: var(--fg-4);
+}
+.rr-scroll { flex: 1; overflow-y: auto; padding: 12px 14px 20px; }
+
+.metric-line {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+  font-size: 11.5px;
+}
+.metric-line:last-child { border-bottom: none; }
+.ml-k { color: var(--fg-3); }
+.ml-v { font-family: var(--mono); color: var(--fg); font-weight: 550; font-size: 11.5px; }
+
+.rr-sec { margin-bottom: 18px; }
+.rr-sec-h {
+  font-size: 10px; font-weight: 650; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--fg-4);
+  margin-bottom: 8px;
+}
+
+.tool-pill {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--fg-3);
+  border: 1px solid transparent;
+  transition: background .15s, border-color .15s, color .15s;
+}
+.tool-pill.on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+.tool-pill .tp-name { font-family: var(--mono); font-size: 10.5px; }
+.tool-pill .tp-cnt {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--fg-4);
+}
+.tool-pill.on .tp-cnt { color: var(--accent); }
+
+/* 迷你时序图 */
+.spark { display: block; width: 100%; height: 46px; }
+
+/* ---------------------------------------------------------------- 骨架 */
+.skeleton {
+  height: 11px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--panel-2) 25%, var(--raise) 50%, var(--panel-2) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.3s infinite;
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* 小工具类 */
+.muted { color: var(--fg-3); }
+.tiny { font-size: 11px; }
+.mt8 { margin-top: 8px; }
+.mt12 { margin-top: 12px; }
+.flex { display: flex; }
+.gap6 { gap: 6px; }
+.items-center { align-items: center; }
+
+/* ===========================================================================
+   多页面工作台（v4.0）
+   ---------------------------------------------------------------------------
+   这一层的设计目标只有一个：让「表格能读」。
+
+   六个页面里有五个的正文是表格或排行。这类界面最容易做错的地方
+   不是配色，是**对齐与留白的节奏**：
+     · 数字右对齐 + 等宽字体 → 位数一目了然，竖着扫能看出量级
+     · 行高固定（不随内容自适应）→ 长原因名换行会把整张表撑歪
+     · 语义色只给"有方向"的数：涨=b红、跌=青绿，其余一律中性
+
+   关于红绿：这里用「红=恶化、青绿=正常」是业务语义（差评涨了是坏事），
+   和股市的涨红跌绿是两套约定。所以不要把它理解成"红色代表上涨"，
+   它代表的是"这个方向对生意不利"。
+   =========================================================================== */
+
+/* ---------------------------------------------------------------- 外壳 */
+.app {
+  display: grid;
+  grid-template-columns: 216px minmax(0, 1fr);
+  grid-template-rows: 44px minmax(0, 1fr);
+  height: 100%;
+  background: var(--bg);
+}
+
+.app-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 18px 22px 40px;
+}
+.app-scroll.no-pad { padding: 0; }
+
+.pg-boot {
+  height: 100%;
+  display: grid;
+  place-items: center;
+}
+
+/* 顶栏在 app 布局里跨两列 */
+.app > .topbar { grid-column: 1 / -1; }
+
+/* ---------------------------------------------------------------- 侧导航 */
+.sidenav {
+  background: var(--bg-sub);
+  border-right: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidenav-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 13px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.sidenav-brand-txt { min-width: 0; }
+.sidenav-brand .brand-name { font-size: 12.5px; }
+.sidenav-brand .brand-sub {
+  font-size: 10.5px;
+  color: var(--fg-4);
+  white-space: nowrap;
+}
+
+.sidenav-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 8px;
+  display: grid;
+  gap: 1px;
+  align-content: start;
+}
+
+.sidenav-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-sm);
+  color: var(--fg-3);
+  text-align: left;
+  cursor: pointer;
+  transition: background .12s, color .12s;
+  font-family: inherit;
+}
+.sidenav-item:hover { background: var(--panel); color: var(--fg-2); }
+.sidenav-item.on {
+  background: var(--panel-2);
+  color: var(--fg);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.sidenav-item.on .sidenav-ico { color: var(--accent); }
+
+.sidenav-ico { flex: none; margin-top: 2px; }
+.sidenav-txt { min-width: 0; display: grid; gap: 1px; }
+.sidenav-t { font-size: 12.5px; font-weight: 550; line-height: 1.3; }
+.sidenav-s {
+  font-size: 10.5px;
+  color: var(--fg-4);
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sidenav-item.on .sidenav-s { color: var(--fg-3); }
+
+.sidenav-foot {
+  padding: 10px 13px 12px;
+  border-top: 1px solid var(--line-soft);
+}
+.sidenav-meta {
+  font-size: 10.5px;
+  font-family: var(--mono);
+  color: var(--fg-3);
+  line-height: 1.6;
+}
+.sidenav-meta.dim { color: var(--fg-4); }
+
+/* ---------------------------------------------------------------- 页头 */
+.pagehead {
+  flex: none;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 22px;
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--bg);
+}
+.pagehead-t {
+  font-size: 13.5px;
+  font-weight: 650;
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+}
+.pagehead-s {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--fg-4);
+}
+.pagehead-r {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+/* ---------------------------------------------------------------- 页面容器 */
+.pg { display: grid; gap: 14px; max-width: 1500px; }
+
+.pg-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  align-items: start;
+}
+@media (max-width: 1180px) {
+  .pg-2col { grid-template-columns: 1fr; }
+}
+
+.pg-foot {
+  font-size: 10.5px;
+  color: var(--fg-4);
+  line-height: 1.7;
+  padding: 2px 2px 0;
+  font-family: var(--mono);
+}
+
+.pg-busy {
+  position: fixed;
+  right: 22px; bottom: 18px;
+  font-size: 11px;
+  color: var(--fg-3);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  padding: 4px 12px;
+}
+
+/* ---------------------------------------------------------------- 卡片 */
+.pg-card {
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.pg-card.tone-bad { border-color: var(--bad-line); }
+
+.pg-card-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 11px 14px 10px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pg-card-t {
+  margin: 0;
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: .1px;
+  color: var(--fg);
+  flex: none;
+}
+.pg-card-note {
+  font-size: 11px;
+  color: var(--fg-4);
+  line-height: 1.55;
+  flex: 1 1 320px;
+  min-width: 0;
+}
+.pg-card-note b { color: var(--fg-3); font-weight: 600; }
+.pg-card-right { margin-left: auto; flex: none; }
+.pg-card-b { padding: 13px 14px; }
+
+.pg-note-inline {
+  padding: 9px 14px 11px;
+  font-size: 10.5px;
+  color: var(--fg-4);
+  line-height: 1.65;
+  border-top: 1px solid var(--line-soft);
+  background: var(--bg-sub);
+}
+.pg-note-inline b { color: var(--fg-3); font-weight: 600; }
+
+/* 独立成行的说明（不是卡片页脚）。
+   .pg-note-inline 是带 border-top + 底色的"页脚"样式，塞在卡片底部正好；
+   但它一旦被当成 .pg 的直接子元素用，就会变成一条悬在两个卡片之间、
+   上边有横线、左右无边界的带子 —— 看起来像渲染了一半。
+   这里去掉容器痕迹，只留一行小字，靠 .pg 的 14px 栅格间距对齐。 */
+.pg-note-line {
+  font-size: 10.5px;
+  color: var(--fg-3);
+  line-height: 1.65;
+  padding: 0 2px;
+}
+.pg-note-line b { color: var(--fg-2); font-weight: 600; }
+
+/* ---------------------------------------------------------------- 指标格 */
+/* 【为什么是 flex 不是 grid auto-fit】
+   auto-fit 会尽量多塞列，但**最后一行不均衡**：5 个格子放在能容 4 列的宽度上，
+   就是 4 + 1，第二行右边空三格的位置；3 个格子放在能容 2 列的宽度上就是 2 + 1。
+   屏幕上表现为"右下角空一块"，看着像没渲染完 —— 504px 实测就是这样。
+   用 media query 只能治某一个宽度（5 格在约 800px 时又变 4+1），治不干净。
+   flex 的 flex-grow 会把最后一行的格子拉伸填满，天生没有孤儿格。
+   宽屏下行为不变（每格 flex-basis 168px、等分剩余）。 */
+.pg-kpi-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+}
+.pg-kpi-row.tight {
+  border-radius: var(--r);
+  margin-top: 12px;
+}
+
+
+.pg-stat {
+  background: var(--panel);
+  padding: 11px 13px 12px;
+  min-width: 0;
+  /* 配合 .pg-kpi-row 的 flex：宽屏约 168px 一格、等分剩余；
+     窄屏换行后最后一行会被拉伸填满，不留孤儿位。 */
+  flex: 1 1 168px;
+}
+.pg-stat-k {
+  font-size: 10px;
+  color: var(--fg-4);
+  letter-spacing: .3px;
+  margin-bottom: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.pg-stat-v {
+  font-size: 19px;
+  font-weight: 600;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--fg);
+  line-height: 1.15;
+  letter-spacing: -.3px;
+}
+.pg-stat-v small {
+  font-size: 10px;
+  color: var(--fg-3);
+  font-weight: 400;
+  margin-left: 3px;
+  letter-spacing: 0;
+}
+/* 【KPI 的语义色：只留"微妙色相"，主要靠亮度】
+   这是全站唯一允许有色的文字，理由是信息而不是装饰：
+   "退货损失 ¥531.2 万"如果不带任何警示，运营扫一眼会当成普通指标略过。
+   但直接用砖红会破坏灰阶（而且红字在深底上显得刺眼、廉价）。
+
+   做法——把语义色"揉进白色里"：
+     · bad  = 近白但偏暖（R 高、B 低 12 左右，人眼能感到"温度"但不觉得是红）
+     · warn = 近白但偏黄
+     · good = 近白但极淡偏冷
+   三者亮度都接近 --fg（0.95），所以视觉重量一致，
+   不会出现"红色那个数字比别的更重"的失衡。
+   读者要靠"色温"分辨，而不是靠"红绿灯"。 */
+.pg-stat-v.t-bad  { color: var(--bad-fg); }
+.pg-stat-v.t-warn { color: var(--warn-fg); }
+.pg-stat-v.t-good { color: var(--good-fg); }
+.pg-stat-v.t-info { color: var(--info-fg); }
+
+.pg-stat-s {
+  font-size: 10px;
+  color: var(--fg-4);
+  margin-top: 4px;
+  line-height: 1.45;
+}
+
+/* ---------------------------------------------------------------- 表格 */
+.pg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11.5px;
+}
+.pg-table th {
+  text-align: left;
+  font-weight: 550;
+  font-size: 10px;
+  letter-spacing: .3px;
+  color: var(--fg-4);
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  white-space: nowrap;
+  background: var(--bg-sub);
+}
+.pg-table th.r, .pg-table td.r { text-align: right; }
+.pg-table th.narrow { width: 34px; }
+.pg-table th.sortable {
+  cursor: pointer;
+  user-select: none;
+}
+.pg-table th.sortable:hover { color: var(--accent); }
+
+.pg-table td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--fg-2);
+  vertical-align: middle;
+}
+.pg-table tbody tr:last-child td { border-bottom: none; }
+.pg-table tbody tr:hover td { background: var(--panel-2); }
+/* 【钉住的行：和 hover 必须能同时看见】
+   hover 只是临时路过，钉住是"我选中了这一类/这条原因"。
+   两者都给整行底色的话，鼠标一移开就分不清哪行还被选着，
+   所以钉住多了左侧一道竖条 + 字色提亮 ——
+   竖条不会被 hover 的底色覆盖，两个状态可以叠加显示。
+   用 inset box-shadow 而不是 border-left：后者会挤动单元格宽度，
+   表格列在这行会和其他行对不齐，切换选中时整表横向抖一下。 */
+.pg-table tbody tr.is-pick td {
+  background: var(--panel-2);
+  box-shadow: inset 2px 0 0 var(--accent-line);
+}
+.pg-table tbody tr.is-pick td:first-child {
+  color: var(--fg);
+  font-weight: 600;
+}
+.pg-table tr.clickable { cursor: pointer; }
+.pg-table tr.clickable:hover td { background: var(--hover); }
+.pg-table tr.pg-row-us td { background: rgba(255,255,255,.045); }
+
+.pg-table .num {
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.pg-table .strong { color: var(--fg); font-weight: 550; }
+/* .dim 也常装数字（"22,769 / 3,880"这种副值列），而且是在同一列里逐行堆着。
+   不设等宽数字时，2 和 8 的宽度差会让整列的位数跳来跳去 ——
+   单看一格没问题，成列就是"没对齐"。只加特性不动字体，中文不受影响。 */
+.pg-table .dim { color: var(--fg-4); font-variant-numeric: tabular-nums; }
+.pg-table .t-bad { color: var(--bad-fg) !important; }
+.pg-table .t-good { color: var(--good-fg) !important; }
+.pg-table .t-warn { color: var(--warn-fg) !important; }
+.pg-table .pg-wrap { white-space: normal; line-height: 1.55; }
+
+.pg-code {
+  display: inline-block;
+  margin-left: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--fg-4);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 3px;
+  vertical-align: 1px;
+}
+
+/* 表格内的迷你条：数字和条并排，条只是给个相对长度的感觉 */
+.pg-cell-bar {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+}
+.pg-cell-bar .pg-bar { width: 100%; max-width: 78px; }
+
+.pg-go { font-size: 10.5px; color: var(--accent); }
+.pg-ns { font-size: 9px; color: var(--fg-4); }
+
+/* ---------------------------------------------------------------- 条 */
+.pg-bar {
+  background: var(--line-soft);
+  border-radius: 99px;
+  overflow: hidden;
+  width: 100%;
+}
+.pg-bar-f {
+  height: 100%;
+  border-radius: 99px;
+  transition: width .3s var(--ease);
+}
+/* 【v4：小条形（4–9px 高）统一灰阶】
+   这类条出现在表格单元格里，高度只有 4px。
+   4px 的彩色条在深底上看起来像"脏的虚线"，而且颜色在这么小的面积上
+   根本传达不了语义 —— 读者只会觉得"这里有块颜色"。
+   统一成三级灰之后：条的存在=有值，亮度=相对大小，
+   语义交给旁边的数字和 ± 符号。
+   t-bad / t-warn 保留类名（各处 JSX 还在传），但视觉上收敛为灰。 */
+.pg-bar-f.t-accent { background: rgba(242,242,243,.72); }
+.pg-bar-f.t-bad    { background: rgba(214,196,193,.78); }
+.pg-bar-f.t-warn   { background: rgba(214,206,192,.72); }
+.pg-bar-f.t-info   { background: rgba(190,193,199,.70); }
+/* 悬停时整行提亮，让"我正在看这一行"有反馈 */
+.pg-cell-bar { transition: opacity var(--t-fast) var(--ease); }
+.pg-table tbody tr:hover .pg-bar-f { filter: brightness(1.25); }
+
+/* ---------------------------------------------------------------- 筛选条 */
+.pg-filterbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pg-filterbar-k {
+  font-size: 10px;
+  color: var(--fg-4);
+  letter-spacing: .3px;
+  margin-right: 2px;
+}
+.pg-fchip {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 99px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--fg-3);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .12s;
+}
+.pg-fchip:hover { color: var(--fg-2); border-color: var(--line-hard); }
+.pg-fchip.on {
+  background: var(--accent-dim);
+  border-color: var(--accent-line);
+  color: var(--accent);
+}
+
+/* ---------------------------------------------------------------- 通用件 */
+.pg-btn {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all .12s;
+}
+.pg-btn:hover { background: rgba(255,255,255,.18); }
+.pg-btn.ghost {
+  background: transparent;
+  border-color: var(--line);
+  color: var(--fg-3);
+}
+.pg-btn.ghost:hover { color: var(--fg); border-color: var(--line-hard); }
+
+.pg-mini {
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--fg-3);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: var(--mono);
+}
+.pg-mini:hover:not(:disabled) { color: var(--fg); border-color: var(--line-hard); }
+.pg-mini:disabled { opacity: .35; cursor: not-allowed; }
+
+.pg-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--fg-3);
+  white-space: nowrap;
+}
+/* 【v4：pg-tag 也从色底降级为"灰底 + 微色调字"】
+   这个标签在归因页页头会被放大展示（"异常周"），
+   红底白字在灰阶界面里是最大的一块彩色，必须收掉。
+   语义仍保留 —— 靠文字色温 + 边框色温，不靠底色。 */
+.pg-tag { border-radius: var(--r-pill); transition: border-color var(--t-fast) var(--ease),
+          background var(--t-fast) var(--ease), transform var(--t-mid) var(--ease); }
+.pg-tag.t-bad  { color: var(--bad-fg); border-color: rgba(194,102,99,.42); background: rgba(194,102,99,.10); }
+.pg-tag.t-good { color: var(--good-fg); border-color: rgba(142,156,148,.40); background: rgba(142,156,148,.09); }
+.pg-tag.t-warn { color: var(--warn-fg); border-color: rgba(185,154,91,.40); background: rgba(185,154,91,.09); }
+
+.pg-empty {
+  padding: 26px 16px;
+  text-align: center;
+}
+.pg-empty-w { font-size: 12px; color: var(--fg-3); font-weight: 550; }
+.pg-empty-y {
+  font-size: 10.5px;
+  color: var(--fg-4);
+  margin-top: 5px;
+  line-height: 1.6;
+  max-width: 460px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.pg-loading {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 40px 16px;
+  justify-content: center;
+  font-size: 11.5px;
+  color: var(--fg-4);
+}
+
+.pg-fail {
+  padding: 22px;
+  border: 1px solid var(--bad-line);
+  border-radius: var(--r-lg);
+  background: var(--bad-dim);
+  max-width: 640px;
+}
+.pg-fail-h { font-size: 12.5px; color: var(--bad); font-weight: 600; }
+.pg-fail-m {
+  font-size: 11px;
+  color: var(--fg-3);
+  margin: 6px 0 12px;
+  font-family: var(--mono);
+  line-height: 1.6;
+  word-break: break-all;
+}
+
+.spinner {
+  width: 11px; height: 11px;
+  border: 1.6px solid var(--line-hard);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+  flex: none;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---------------------------------------------------------------- 图表 */
+.pg-chart {
+  padding: 10px 8px 4px;
+  /* 【v4.6：整条线都是可读区，光标用 crosshair 而不是 pointer】
+     pointer 在暗示"这里有个按钮"，读者会以为只有那几个红点能点；
+     而这图真正的作用是"读到某一周的数"——可以量取，不是可以按。
+     命中范围本来就是整条曲线带，光标形状应当和它一致。 */
+  cursor: crosshair;
+  /* 【v4.7 框选的前提】
+     不加这条，按住往右拖会选中页面上的文字，图上拖出一片蓝色高亮，
+     而且松手后选区看起来像"没生效"。图和控件都不该被文字选择命中。 */
+  user-select: none;
+  -webkit-user-select: none;
+  /* 【触屏：纵向滚动交给浏览器，横向手势留给自己】
+     默认的 touch-action: auto 下，手指在图上横向滑动会被浏览器
+     当成滚动/手势去处理，touchmove 里收不到连续事件，框选就断了。
+     pan-y 明确表态：上下滚你管，左右拖我管。
+     只写 pan-y 而不是 none —— 图上纵向滚动是正常需求，
+     禁掉的话用户想滚过这一屏会发现手指在图上失灵。
+
+     `touch-action` 在 Chrome 里会**抑制**合成鼠标事件，
+     和 JS 里 touchmove 的 preventDefault 是同一件事的两道保险。 */
+  touch-action: pan-y;
+}
+.pg-chart-svg { display: block; width: 100%; height: 220px; }
+
+/* 【光标准星：跟随鼠标的那条竖线】
+   位置**不加过渡**。跟随类元素一旦对位置做过渡就会"追"着鼠标跑，
+   看起来像掉帧 —— 和热力格 tooltip "跟随而不滞后"是同一条理由。
+   它是读数辅助，不是动画，越即时越好。 */
+.pg-cross {
+  stroke: rgba(255, 255, 255, .28);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+}
+
+/* 【异常周圆点：全站唯一一处"瞬间跳变"，已修正】
+   原来只有一句 `.pg-dot-g:hover circle { r: 4.4 }`，没有过渡 ——
+   鼠标一放上去，圆点**突然变大**，而周围所有元素（卡片、按钮、条形、
+   热力格）都是 160–320ms 的平滑过渡。这种"一个地方硬跳"的手感，
+   比完全不做反馈更难受：用户会以为是掉帧。
+
+   这也违反我在交互层开头写的原则：
+   "三个地方写成三种时长，界面就会有的地方活、有的地方死"。
+
+   现在补齐两件事：
+   1. transition 补上（180ms，接近 --t-fast 的 140 但略慢，
+      因为半径变化比颜色变化更需要"看得见过程"）
+   2. hover 和 focus-visible 走**同一套**反馈 ——
+      鼠标和键盘不该看到一个元素的两种样子
+   另外把描边也加粗一点：灰阶下 r 从 3.4→5 的差别不如加一圈深色描边明显。 */
+.pg-dot-g { cursor: pointer; }
+.pg-dot-g > circle:nth-child(2) {
+  transition:
+    r 180ms var(--ease),
+    stroke-width 180ms var(--ease),
+    fill 180ms var(--ease);
+}
+.pg-dot-g:hover > circle:nth-child(2),
+.pg-dot-g:focus-visible > circle:nth-child(2) {
+  r: 5;
+  stroke-width: 2.2;
+}
+/* SVG 的 <g> 上，全局 outline 会画在**包围盒**外侧（约 18×18 的一块矩形），
+   对圆形来说略显方正，所以额外给透明热区圆加一圈柔光，
+   让"这个点被选中"在形状上也说得通。
+   但**不抹掉 outline** —— 上一节刚说过：焦点环不该被任何规则吃掉，
+   outline 是格子，柔光是修饰，两者叠加而不是替换。 */
+.pg-dot-g:focus-visible > circle:first-child {
+  fill: rgba(255, 255, 255, .10);
+}
+
+/* ------------------------------------------------------- 趋势图·框选摘要 */
+/* 【v4.7：框选出来的那一段，结论放在图下方】
+   不浮在图里，因为框选之后读者要继续用眼睛比对刚选中的那段曲线，
+   浮层正好会盖住它。做成卡片内容的一部分，出现时把卡片撑高一点 ——
+   它是"这一屏多出来的新内容"，不是随时会消失的临时提示。
+
+   一行排不下就换行，不截断：这些数字里没有一个是可以省略的，
+   而截断一个数字比换行难看得多。 */
+.pg-selbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  margin: 0 8px 8px;
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+  background: var(--panel-2);
+  /* 左侧一道强调色，和顶部卡片的语气一致，但不抢曲线的白 */
+  border: 1px solid var(--line-soft);
+  border-left: 2px solid var(--accent-line);
+  font-size: 11px;
+  color: var(--fg-3);
+  /* 出现时淡入。框选松手的那一刻信息量大，直接"啪"地出现会让人以为是误触 */
+  animation: selbar-in 160ms var(--ease);
+}
+@keyframes selbar-in {
+  from { opacity: 0; transform: translateY(-2px); }
+  to   { opacity: 1; transform: none; }
+}
+.pg-selbar-h {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.pg-selbar-h em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--fg-4);
+}
+.pg-selbar-i {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  white-space: nowrap;
+}
+.pg-selbar-i b {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--fg);
+}
+.pg-selbar-i em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg-4);
+}
+.pg-selbar-i b.t-bad { color: var(--bad-fg); }
+.pg-selbar-i b.t-good { color: var(--good-fg); }
+.pg-selbar-note {
+  font-size: 10px;
+  color: var(--fg-4);
+  /* 口径说明弱化到"读到就行"的程度，但不能没有 —— 
+     简单平均和加权平均是两个数，不写清楚会有人拿它对 KPI */
+  opacity: .85;
+}
+.pg-selbar-x {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10.5px;
+  color: var(--fg-4);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+.pg-selbar-x:hover { color: var(--fg-2); }
+.pg-selbar-x kbd {
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  border: 1px solid var(--line);
+  color: var(--fg-4);
+}
+
+/* 【选区入口：无选区时占摘要条那块位置】
+   高度刻意做成和摘要条接近（同一行的高度），
+   这样出现/消失时卡片只微微动一下，不会把下面的热力图顶得老远。 */
+.pg-selgo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 6px 10px;
+  font-size: 10.5px;
+  color: var(--fg-4);
+}
+.pg-selgo-h { margin-right: 4px; }
+.pg-selgo-b {
+  font: inherit;
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--fg-3);
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease),
+              border-color var(--t-fast) var(--ease),
+              background var(--t-fast) var(--ease);
+}
+.pg-selgo-b:hover {
+  color: var(--fg);
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+}
+/* 键盘焦点环不能省：这三个按钮是键盘用户进入区间分析的唯一入口 */
+.pg-selgo-b:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pg-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 10px 8px;
+  font-size: 10.5px;
+  color: var(--fg-4);
+  flex-wrap: wrap;
+}
+.pg-chart-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.pg-chart-legend .sw {
+  width: 14px;
+  height: 3px;
+  border-radius: var(--r-pill);
+  width: 9px; height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+}
+/* 【v4：图例必须和实际线条同源】
+   走势图两条线改成了亮灰实线 / 暗灰虚线。
+   如果图例还画着白块和红块，读者会按图例去找一条红线的"负评率"，
+   找不到，就会怀疑图坏了。
+   这里用"实线块 vs 虚线块"延续线型差异，颜色取实际 stroke 值。 */
+.pg-chart-legend .sw.good { background: rgba(242,242,243,.92); }
+.pg-chart-legend .sw.bad {
+  background: repeating-linear-gradient(90deg,
+    rgba(196,196,202,.90) 0 5px, transparent 5px 8px);
+}
+.pg-chart-legend .sw.gray { background: rgba(90,90,97,.5); }
+.pg-chart-legend-note { margin-left: auto; font-size: 10px; }
+
+/* ---------------------------------------------------------------- 周次条 */
+.pg-weekbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 13px;
+  flex-wrap: wrap;
+}
+.pg-weekbar-l { display: flex; align-items: center; gap: 7px; }
+.pg-weekbar-v {
+  font-size: 13px;
+  color: var(--fg-2);
+  font-family: var(--mono);
+}
+.pg-weekbar-v b { color: var(--fg); font-size: 15px; }
+.pg-weekbar-r {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.pg-weekbar-hint { font-size: 10px; color: var(--fg-4); margin-right: 3px; }
+
+.pg-wchip {
+  height: 21px;
+  min-width: 32px;
+  padding: 0 6px;
+  border-radius: 4px;
+  border: 1px solid var(--bad-line);
+  background: var(--bad-dim);
+  color: var(--bad-fg);
+  font-size: 10px;
+  font-family: var(--mono);
+  cursor: pointer;
+}
+.pg-wchip:hover { background: rgba(194,102,99,.22); }
+.pg-wchip.on {
+  background: var(--bad);
+  color: #0b0b0c;
+  border-color: var(--bad);
+  font-weight: 700;
+}
+
+/* ------------------------------------------------- 双门槛（已删） */
+/* 2026-11-03：归因页那张「为什么这样判」大卡拿掉了 —— 它把 KPI 副标题里
+   已有的两个门槛和「异常周」标签又摊了一遍。相关样式一并清掉，
+   避免留下"改了 UI、CSS 里还躺着整套没用上的类"这种半截状态。 */
+
+/* ------------------------------------------------------------ 分解账目 */
+/* 【为什么不做堆叠条】
+   堆叠条的几何语义就是"两段相加等于全长"。但这里两个数口径不同：
+   「结构效应 0.04」是 shift-share 的加权分解，
+   「同批 SKU 自身涨幅 3.98」是配对差的**等权平均**（每个 SKU 一样重）。
+   相加 4.02 并不等于实际涨幅 3.28 —— 差 0.74pp 没有出处。
+   把它俩画成一条，等于用图形宣称一个不成立的加法。
+   改成三个并列的账目格：每格自带口径说明，读者不会去做那个加法。 */
+.pg-ledger {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;                       /* 用 1px 的缝当分隔线，不额外画边框 */
+  background: var(--line);
+  border-radius: var(--r-sm);
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.pg-ledger-i { background: var(--bg-sub); padding: 9px 12px 10px; min-width: 0; }
+.pg-ledger-i.is-quiet .pg-ledger-v { color: var(--fg-2); }
+.pg-ledger-k { font-size: 10px; color: var(--fg-4); margin-bottom: 3px; }
+.pg-ledger-v {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+.pg-ledger-v small {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--fg-4);
+  margin-left: 2px;
+}
+.pg-ledger-s {
+  font-size: 10px;
+  color: var(--fg-4);
+  line-height: 1.55;
+  margin-top: 4px;
+}
+.pg-ledger-s b { color: var(--fg-2); font-weight: 600; }
+.pg-ledger-warn { display: block; color: var(--warn); margin-top: 2px; }
+/* 账目块的脚注：横跨三列的底行。放进 grid 里当第 4 个 item，
+   这样它和上面三格是同一个视觉整体，不会跟下面的 KPI 行抢归属。 */
+.pg-ledger-note {
+  grid-column: 1 / -1;
+  background: var(--bg-sub);
+  padding: 7px 12px 8px;
+  font-size: 10px;
+  color: var(--fg-4);
+  line-height: 1.6;
+}
+.pg-ledger-note b { color: var(--fg-2); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .pg-ledger { grid-template-columns: 1fr; }
+}
+
+/* ---------------------------------------------------------------- 结论块 */
+.pg-verdict {
+  border: 1px solid var(--accent-line);
+  background: rgba(255,255,255,.045);
+  border-radius: var(--r);
+  padding: 11px 13px;
+  margin-top: 13px;
+}
+.pg-verdict-h {
+  font-size: 12.5px;
+  color: var(--accent);
+  font-weight: 650;
+  line-height: 1.5;
+}
+.pg-verdict-list {
+  margin: 7px 0 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 3px;
+}
+.pg-verdict-list li {
+  font-size: 11px;
+  color: var(--fg-2);
+  line-height: 1.6;
+}
+.pg-verdict-impl {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--accent-line);
+  font-size: 11px;
+  color: var(--fg-2);
+  line-height: 1.65;
+}
+
+/* ---- 判定依据 v2（策划页专用）：行式，不再四个大空框 ----
+   【为什么重做】旧版四条各套一个带边框的大盒子，一行字占 60px 高，
+   空旷得像没做完（用户截图点名）。行式：门槛名 + 数值 + 结论徽章一行排开，
+   说明文字缩到数值下一行小字，密度和左栏贡献条对齐。 */
+.pg-verdict2 { display: flex; flex-direction: column; gap: 2px; }
+.pg-verdict2-r {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 8px 1px;
+  margin: 0 -8px;
+  border-radius: 6px;
+  transition: background .14s ease;
+}
+.pg-verdict2-r:hover { background: rgba(255,255,255,.05); }
+.pg-verdict2-k {
+  font-size: 11px;
+  color: var(--fg-3);
+  min-width: 62px;
+}
+.pg-verdict2-v {
+  font-size: 13px;
+  color: var(--fg);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.pg-verdict2-j {
+  margin-left: auto;
+  font-size: 10px;
+  border-radius: 3px;
+  padding: 1px 7px;
+  letter-spacing: .5px;
+}
+.pg-verdict2-j.ok    { color: var(--fg-2); background: rgba(255,255,255,.09); }
+.pg-verdict2-j.warn  { color: var(--warn, #b99a5b); background: rgba(185,154,91,.14); }
+.pg-verdict2-j.bad   { color: #e7b1ae; background: rgba(194,102,99,.16); }
+.pg-verdict2-j.muted { color: var(--fg-4); background: rgba(255,255,255,.05); }
+.pg-verdict2-sub {
+  font-size: 10px;
+  color: var(--fg-4);
+  padding: 0 8px 6px 80px;
+  margin: 0 -8px;
+  border-bottom: 1px dashed var(--line-soft);
+}
+.pg-verdict2-r:last-of-type + .pg-verdict2-sub { border-bottom: 0; }
+.pg-verdict-k {
+  display: inline-block;
+  font-size: 9.5px;
+  color: var(--accent);
+  border: 1px solid var(--accent-line);
+  border-radius: 3px;
+  padding: 0 4px;
+  margin-right: 6px;
+  vertical-align: 1px;}
+
+/* ---------------------------------------------------------------- 排他性 */
+.pg-alt { margin-top: 13px; }
+.pg-alt-h {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  font-weight: 550;
+  margin-bottom: 8px;
+}
+.pg-alt-h span {
+  font-weight: 400;
+  color: var(--fg-4);
+  font-size: 10.5px;
+  margin-left: 7px;
+}
+.pg-alt-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.pg-alt-item { background: var(--bg-sub); padding: 9px 11px; }
+.pg-alt-k { font-size: 10px; color: var(--fg-4); margin-bottom: 3px; line-height: 1.4; }
+.pg-alt-v { font-size: 13px; font-family: var(--mono); color: var(--fg); font-weight: 600; }
+.pg-alt-s { font-size: 9.5px; margin-top: 3px; }
+.pg-alt-s.ok { color: var(--accent); }
+.pg-alt-s.bad { color: var(--bad); }
+
+/* ---------------------------------------------------------------- 热力矩阵 */
+/* 【窄屏的明细表：不给它压缩的机会】
+   18 列的明细表在 504px 下会被压到每列 40px 左右，文字变成一字一行
+   （实测「破损/变质/污损」45×122，高是宽的 2.7 倍，9 个格子都这样）。
+   reflow 探针不报——它是被压缩，不是溢出，这也是它一直没被发现的原因。
+   热力矩阵早就是这个做法（.pg-heat-wrap + min-width），这里补齐同一套：
+   内容不折行 + 容器横向滚动。一列数据都不少，用户自己决定看哪几列，
+   比"全塞进屏幕但一个字一行"诚实。
+   min-width: 100% 保证宽屏下表格仍然铺满卡片，不会缩成一条。 */
+.pg-table-wrap { overflow-x: auto; }
+.pg-table-wrap > .pg-table { min-width: 100%; white-space: nowrap; }
+
+/* 窄屏把单元格左右内边距从 10px 收到 7px。
+   10px×2×7 列 = 140px 全花在留白上，而不少表只差十几像素就放得下
+   —— 那种情况下冒出一根滚动条去换 14px，比挤一点还难看。
+   收紧后仪表盘那张表正好回到屏幕内，其余表的溢出量也小一截。 */
+@media (max-width: 900px) {
+  .pg-table th, .pg-table td { padding-left: 7px; padding-right: 7px; }
+}
+
+.pg-heat-wrap { overflow-x: auto; }
+.pg-heat { min-width: 760px; }
+.pg-heat-corner { font-size: 9.5px !important; }
+.pg-heat-th {
+  font-size: 9.5px !important;
+  writing-mode: horizontal-tb;
+  max-width: 76px;
+  white-space: normal !important;
+  line-height: 1.3;
+  vertical-align: bottom;
+  padding-bottom: 6px !important;
+}
+.pg-heat-td { padding: 2px 3px !important; }
+/* 3px → 4px：和树图格子同一档，统一走 --r-cell。
+   它俩是同一类东西（挤在网格里、彼此只隔 1–2px 的"色块"），
+   不是条 —— 条能给 6px，色块给 6px 会变成胶囊、还会在缝隙处掐腰。 */
+.pg-heat-fill {
+  display: block;
+  padding: 4px 6px;
+  border-radius: var(--r-cell);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--fg);
+  min-height: 21px;
+}
+/* 值为 0 的格子：要印出 0（空白会被读成"没渲染"），但压到最低一档灰，
+   不跟真有大值的格子抢注意力。 */
+.pg-heat-fill.is-zero { color: var(--fg-4); }
+
+/* ------------------------------------------------ 矩阵当看板用：十字高亮 + 下钻 */
+/* 【可点的格子必须有指针光标】
+   这是给用户看的唯一"这里能点"的承诺，同时也是门禁的判据
+   （_TABLE_PROBE 拿 cursor:pointer 统计可点元素）。
+   少了它，键盘够不着这件事连自动检查都发现不了。 */
+.pg-heat-td {
+  cursor: pointer;
+  transition: opacity var(--t-fast) var(--ease);
+}
+/* 十字线：不在同一行、同一列的全部压暗。
+   压到 .38 而不是更低 —— 0 值格子本来就靠暗灰表示"这里没有"，
+   再压一层就和"空格子"混在一起了。 */
+.pg-heat-td.is-dim { opacity: .38; }
+/* 锁定的那一格用**内圈描边**，不用 outline。
+   outline 那个通道留给 :focus-visible —— 两者抢同一个位置时，
+   焦点环会被"已选中"盖掉，键盘用户就看不见自己停在哪了（本项目踩过）。 */
+.pg-heat-td.is-pick .pg-heat-fill {
+  box-shadow: inset 0 0 0 1.5px var(--fg);
+}
+/* 选中原因时，对应的列头一起点亮：只亮格子的话，
+   读者还得自己数到第几列才知道亮的是哪个原因。 */
+.pg-heat-th.is-col { color: var(--fg); }
+/* 锁定某一格之后，行标签也留一条竖条。
+   列头 + 行标签竖条 + 格内描边三个信号都**不动颜色**，
+   所以它们叠加在热力上不会改变"深浅=大小"这条读数规则。 */
+.pg-heat tbody tr.is-row td:first-child {
+  box-shadow: inset 2px 0 0 0 var(--fg);
+}
+/* 行头下面挂该类目的退货量：占比的分母不写出来，
+   "15%"到底是 300 条还是 3000 条里的 15%，读者没法判断。 */
+.pg-heat-cat { line-height: 1.3; }
+.pg-heat-sub {
+  display: block;
+  font-size: 9.5px;
+  font-weight: 400;
+  color: var(--fg-4);
+  font-family: var(--mono);
+}
+/* 行内小按钮（"取消锁定"）：只作为说明行里的一个动作，不占一整块 */
+.pg-linkbtn {
+  margin-left: 6px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-size: 10.5px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pg-linkbtn:hover { color: var(--fg); }
+
+/* ---------------------------------------------------------------- 星级 */
+.pg-stars { display: grid; gap: 7px; padding: 13px 14px; }
+.pg-star-row { display: flex; align-items: center; gap: 9px; }
+.pg-star-k {
+  width: 34px;
+  font-size: 10.5px;
+  color: var(--fg-3);
+  font-family: var(--mono);
+  flex: none;
+}
+.pg-star-bar { flex: 1; }
+.pg-star-n {
+  width: 48px;
+  text-align: right;
+  font-size: 10.5px;
+  color: var(--fg-2);
+}
+.pg-star-p { width: 42px; text-align: right; font-size: 10px; }
+
+/* ---------------------------------------------------------------- 词云 */
+.pg-title-withswitch {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+.pg-switch {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.pg-switch button {
+  border: none;
+  background: transparent;
+  color: var(--fg-4);
+  font-size: 10px;
+  font-family: inherit;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.pg-switch button.on { background: var(--panel-2); color: var(--accent); }
+
+.pg-wc { padding: 10px 14px 13px; display: grid; gap: 2px; }
+.pg-wc-row {
+  display: grid;
+  grid-template-columns: 74px minmax(60px, 1fr) 44px 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pg-wc-row:last-child { border-bottom: none; }
+.pg-wc-w {
+  font-size: 11.5px;
+  color: var(--fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-wc-bar { min-width: 0; }
+.pg-wc-n {
+  text-align: right;
+  font-size: 10.5px;
+  color: var(--fg-3);
+}
+.pg-wc-lift {
+  text-align: right;
+  font-size: 10.5px;
+  color: var(--warn);
+  border-left: 1px dashed var(--line);
+  padding-left: 8px;
+}
+.pg-wc-q {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: var(--fg-4);
+  line-height: 1.55;
+  padding-left: 2px;
+  margin-top: -2px;
+  margin-bottom: 3px;
+  border-left: 1px solid var(--line);
+  padding-left: 8px;
+}
+
+/* ---------------------------------------------------------------- 画像 */
+.pg-persona { display: grid; gap: 13px; }
+.pg-ps-group { display: grid; gap: 8px; }
+.pg-ps-h {
+  font-size: 11px;
+  color: var(--fg-2);
+  font-weight: 600;
+  letter-spacing: .2px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.pg-ps-desc { font-size: 10px; color: var(--fg-4); font-weight: 400; }
+
+.pg-ps-item {
+  background: var(--bg-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+}
+.pg-ps-top { display: flex; align-items: baseline; gap: 8px; }
+.pg-ps-signal { font-size: 11.5px; color: var(--fg); flex: 1; }
+.pg-ps-pct { font-size: 12px; color: var(--accent); font-weight: 600; }
+.pg-ps-n { font-size: 9.5px; }
+
+.pg-ps-quote {
+  margin-top: 5px;
+  padding-left: 9px;
+  border-left: 1px solid var(--line);
+  font-size: 10.5px;
+  color: var(--fg-3);
+  line-height: 1.6;
+}
+.pg-hit {
+  font-style: normal;
+  color: var(--warn);
+  background: var(--warn-dim);
+  border-radius: 2px;
+  padding: 0 1px;
+}
+
+.pg-cannot {
+  margin-top: 14px;
+  border: 1px dashed var(--warn-line);
+  border-radius: var(--r);
+  padding: 10px 12px;
+  background: rgba(185,154,91,.045);
+}
+.pg-cannot-h {
+  font-size: 10.5px;
+  color: var(--warn);
+  font-weight: 600;
+  margin-bottom: 5px;
+}
+.pg-cannot ul { margin: 0; padding-left: 15px; display: grid; gap: 3px; }
+.pg-cannot li { font-size: 10.5px; color: var(--fg-3); line-height: 1.6; }
+
+/* ---------------------------------------------------------------- 竞品 */
+.pg-dimvals { display: flex; gap: 3px; flex-wrap: wrap; }
+.pg-dimval {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+  font-size: 9.5px;
+  color: var(--fg-4);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 4px;
+  line-height: 15px;
+}
+.pg-dimval i { font-style: normal; font-family: var(--mono); color: var(--fg-3); }
+.pg-dimval.us {
+  border-color: var(--accent-line);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.pg-dimval.us i { color: var(--accent); }
+
+.pg-contrast {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--line-soft);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.pg-ct-side { background: var(--bg-sub); padding: 10px 12px; }
+.pg-ct-h {
+  font-size: 10.5px;
+  font-weight: 600;
+  margin-bottom: 7px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--fg-3);
+}
+.pg-ct-side.ours .pg-ct-h { color: var(--accent); }
+.pg-ct-side.theirs .pg-ct-h { color: var(--info); }
+
+.pg-ct-row {
+  display: grid;
+  grid-template-columns: 1fr 44px 40px;
+  gap: 6px;
+  align-items: baseline;
+  padding: 2px 0;
+  font-size: 11px;
+}
+.pg-ct-w { color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-ct-n { text-align: right; color: var(--fg-3); font-size: 10px; }
+.pg-ct-lr { text-align: right; font-size: 9.5px; }
+
+/* ---------------------------------------------------------------- 自检 */
+.pg-suite-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pg-dot-status {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--fg-4);
+  flex: none;
+}
+.pg-dot-status.ok { background: var(--accent); box-shadow: 0 0 0 3px rgba(255,255,255,.14); }
+.pg-dot-status.bad { background: var(--bad); }
+.pg-dot-status.warn { background: var(--warn); }
+
+.pg-suite-file {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--fg-4);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 4px;
+}
+.pg-suite-n { font-size: 10px; color: var(--fg-4); font-weight: 400; }
+
+.pg-scale { padding: 10px 14px 12px; display: grid; gap: 1px; }
+.pg-scale-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pg-scale-row:last-child { border-bottom: none; }
+.pg-scale-k { font-size: 11px; color: var(--fg-3); }
+.pg-scale-v { font-size: 12px; color: var(--fg); font-weight: 600; }
+
+.pg-indep-how {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  line-height: 1.65;
+  padding: 10px 12px;
+  background: var(--bg-sub);
+  border-radius: var(--r-sm);
+  border-left: 2px solid var(--accent-line);
+}
+.pg-indep-proof {
+  margin: 9px 0 0;
+  padding-left: 16px;
+  display: grid;
+  gap: 3px;
+}
+.pg-indep-proof li {
+  font-size: 10.5px;
+  color: var(--fg-4);
+  line-height: 1.6;
+  font-family: var(--mono);
+}
+
+/* ---------------------------------------------------------------- 问答页 */
+/* 问答页自带三栏，所以它在外壳里要占满整块（去掉外层 padding） */
+.chat-shell {
+  display: grid;
+  grid-template-columns: 232px minmax(0, 1fr) 320px;
+  height: 100%;
+  min-height: 0;
+}
+@media (max-width: 1280px) {
+  .chat-shell { grid-template-columns: 210px minmax(0, 1fr); }
+  .chat-rr { display: none; }
+}
+@media (max-width: 900px) {
+  .chat-shell { grid-template-columns: minmax(0, 1fr); }
+  .chat-rail { display: none; }
+}
+
+.chat-rail {
+  border-right: 1px solid var(--line-soft);
+  background: var(--bg-sub);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.chat-stage {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.chat-rr {
+  border-left: 1px solid var(--line-soft);
+  background: var(--bg-sub);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* 侧栏在窄屏隐藏 */
+@media (max-width: 960px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .sidenav { display: none; }
+}
+
+/* ===========================================================================
+   BI 交互看板组件（BiKit.tsx）
+   ---------------------------------------------------------------------------
+   这一组样式只负责"让数据可读、可点、可对照"，不引入新的视觉语言：
+   颜色全部复用 --accent / --bad / --good，圆角沿用 --r-sm，
+   字号继续走 10–11.5px 这一档（专业工具的信息密度）。
+   =========================================================================== */
+
+/* ---------------------------------------------------------------- tooltip */
+
+.bi-tip {
+  position: fixed;
+  z-index: 9000;
+  min-width: 168px;
+  max-width: 260px;
+  padding: 9px 11px;
+  background: var(--raise);
+  border: 1px solid var(--line-hard);
+  border-radius: var(--r);
+  box-shadow: var(--shadow-3);
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--fg-2);
+  pointer-events: none;
+  /* 【浮层必须不可选中、不挡点击】
+     pointer-events:none 不是为了美观 —— 鼠标停在格子上时浮层正好盖住格子，
+     没有这条，onMouseLeave 永远不触发，浮层会一直挂着。 */
+  user-select: none;
+}
+.bi-tip-h {
+  color: var(--fg);
+  font-weight: 600;
+  font-size: 11.5px;
+  margin-bottom: 4px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.bi-tip-code {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--fg-4);
+  font-weight: 400;
+  margin-left: 4px;
+}
+.bi-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  white-space: nowrap;
+}
+.bi-tip-row b {
+  color: var(--fg);
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-weight: 550;
+}
+/* 【浮层里的次要行要单独提亮】
+   tooltip 的底是 --raise，比卡片亮一级，同样的 --fg-4 在这里
+   对比度只有 4.45（差 0.05）。为这一个值去整体抬高 --fg-4 不划算 ——
+   那会让全站标签一起变亮，层级反而糊掉。
+   局部覆写一个略亮的灰，只影响浮层内部。 */
+.bi-tip-row.dim { color: #8f8f98; font-size: 10.5px; display: block; white-space: normal; }
+.bi-tip-row b.t-bad { color: var(--bad-fg); }
+.bi-tip-row b.t-good { color: var(--good-fg); }
+.bi-tip-go {
+  margin-top: 5px;
+  padding-top: 5px;
+  border-top: 1px solid var(--line-soft);
+  color: var(--accent);
+  font-size: 10.5px;
+  opacity: .85;
+}
+
+/* ---------------------------------------------------------------- 分段控件 */
+
+.bi-seg-wrap { display: flex; align-items: center; gap: 7px; }
+.bi-seg-label { font-size: 10px; color: var(--fg-4); letter-spacing: .3px; }
+.bi-seg {
+  display: inline-flex;
+  gap: 1px;
+  padding: 2px;
+  background: var(--bg-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+}
+.bi-seg-i {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--fg-3);
+  font-size: 10.5px;
+  font-family: inherit;
+  padding: 3px 9px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: color .13s var(--ease), background .13s var(--ease);
+  white-space: nowrap;
+}
+.bi-seg-i:hover { color: var(--fg-2); background: var(--panel-2); }
+.bi-seg-i.on { color: var(--bg); background: var(--accent); font-weight: 600; }
+
+/* ---------------------------------------------------------------- 横向条形 */
+
+.bi-bar-body { padding: 10px 12px 4px; }
+.bi-bars { display: flex; flex-direction: column; gap: 2px; }
+
+.bi-bar-row {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) 116px;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px;
+  border-radius: var(--r-sm);
+  transition: background .12s var(--ease);
+}
+.bi-bar-row.clickable { cursor: pointer; }
+.bi-bar-row:hover { background: var(--panel-2); }
+.bi-bar-row.on { background: var(--accent-dim); box-shadow: inset 2px 0 0 var(--accent); }
+
+.bi-bar-l {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bi-bar-row.on .bi-bar-l { color: var(--fg); font-weight: 550; }
+
+.bi-bar-track {
+  position: relative;
+  height: 15px;
+  background: rgba(255, 255, 255, .028);
+  border-radius: var(--r-bar);
+  overflow: hidden;
+}
+.bi-bar-f {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: var(--r-bar);
+  transition: width .26s var(--ease);
+}
+/* 对比底条：只描边不填充，避免和主条抢注意力 */
+.bi-bar-f.is-ghost {
+  background: transparent;
+  border: 1px dashed rgba(168, 178, 196, .38);
+  border-radius: var(--r-bar);
+  z-index: 0;
+}
+.bi-bar-f.t-accent { background: linear-gradient(90deg, rgba(255,255,255,.52), var(--accent)); }
+.bi-bar-f.t-bad    { background: linear-gradient(90deg, rgba(194,102,99,.48), var(--bad)); }
+.bi-bar-f.t-good   { background: linear-gradient(90deg, rgba(142,156,148,.42), var(--good)); }
+.bi-bar-f.t-info   { background: linear-gradient(90deg, rgba(125,135,148,.48), var(--info)); }
+.bi-bar-f.t-warn   { background: linear-gradient(90deg, rgba(185,154,91,.48), var(--warn)); }
+.bi-bar-row > .bi-bar-track > .bi-bar-f:not(.is-ghost) { z-index: 1; }
+
+.bi-bar-v {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.35;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+.bi-bar-main { font-size: 11.5px; color: var(--fg); }
+.bi-bar-sub { font-size: 9.5px; color: var(--fg-4); }
+.bi-bars-note {
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10px;
+  color: var(--fg-4);
+  line-height: 1.6;
+}
+.bi-bars-note b { color: var(--fg-3); font-weight: 500; }
+
+/* ---------------------------------------------------------------- 热力矩阵 */
+
+.bi-heat-wrap { padding: 11px 12px 9px; overflow-x: auto; }
+.bi-heat { min-width: 660px; display: flex; flex-direction: column; gap: 2px; }
+
+.bi-heat-row { display: flex; gap: 2px; align-items: center; }
+.bi-heat-label {
+  flex: 0 0 62px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  padding-right: 7px;
+  line-height: 1.25;
+}
+.bi-heat-cat { font-size: 11px; color: var(--fg-2); }
+.bi-heat-base {
+  font-size: 9px;
+  color: var(--fg-4);
+  font-family: var(--mono);
+}
+.bi-heat-row.is-head .bi-heat-wk {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 8.5px;
+  color: var(--fg-4);
+  text-align: center;
+  font-family: var(--mono);
+  height: 12px;
+}
+.bi-heat-c {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 22px;
+  border-radius: 2px;
+  cursor: pointer;
+  /* 【色块画在伪元素上，不画在自己身上】
+     原因：高对比度模式下要改用它表达"深浅"（opacity），
+     而如果 opacity 加在格子本身，会连异常周的 outline 一起变淡 ——
+     恰恰把最重要的标记削弱了。画在伪元素上，父元素的 outline 不受影响。
+     正常模式这里的值就是 color() 算好的带 alpha 的 rgba。 */
+  background: var(--heat-bg, transparent);
+  /* ::before 的定位上下文；同时它也是 HC 下的着色层 */
+  position: relative;
+  /* 【默认透明而不是灰底】
+     灰底会让"没有数据"和"持平"长一个样。
+     这里 0 偏离就是极淡的底色，空值（找不到格子）才真正透明。 */
+  transition: outline-color .1s var(--ease);
+  outline: 1px solid transparent;
+}
+.bi-heat-c:hover { outline-color: var(--fg-2); }
+.bi-heat-c.is-anom {
+  /* 异常周描边而不是加亮：颜色已经承载"偏离多少"，
+     再用颜色强调会撞车（深红 + 更红 = 分不清）。
+     描边是另一条视觉通道，两者可以叠加而不互相干扰。 */
+  outline: 1.5px solid var(--bad);
+  outline-offset: -1.5px;
+}
+.bi-heat-c.is-trivial { outline: 1px dashed rgba(185,154,91, .55); outline-offset: -1px; }
+.bi-heat-c.is-empty { cursor: default; }
+
+/* 【联动高亮：趋势图上悬停/框选的那一周/那一段】
+   为什么用 box-shadow 而不是 outline：
+   outline 已经被两条语义占用了 —— 红框=异常周、黄虚线=统计显著但幅度不够。
+   联动是"现在正在看这里"，和"这一格的数据意味着什么"是两件事，
+   不能挤同一个通道，否则高亮一出现就把异常标记盖掉了。
+
+   box-shadow 画在最上层，不与任何 outline 冲突，也不改变盒子尺寸
+   （插 shadow vs 改 padding，前者不会让 208 格错位一像素）。
+   透明度刻意压到 .34：它能说明"这一列在联动"，但不该比红框更抢眼。 */
+.bi-heat-c.is-link {
+  box-shadow: inset 0 0 0 1.5px rgba(242, 242, 243, .34);
+}
+
+/* 【热力格：焦点环和「异常标记」必须同时看得见】
+   这一格的 outline 平时承载语义（红框=异常周、黄虚线=统计显著但幅度不够），
+   按惯例焦点不该去抢它 —— 一聚焦就把"这格是什么"换成"我在哪"，信息反而少了。
+   但反过来让焦点改用 box-shadow 也不成立：审计脚本的判定顺序是先 outline，
+   而 .bi-heat-c 的基态是 `outline: 1px solid transparent`（永远"有 outline"），
+   于是它会拿着一个透明色去算对比度，box-shadow 那条永远轮不到被看见。
+
+   所以把两条信息分到两个通道上，各占各的位置：
+     · 焦点环 → outline（外圈白色，offset 0，正好压在 2px 的格子间隙里）
+     · 异常标记 → 聚焦时迁到 inset 阴影（内圈红色），不再和焦点抢 outline
+   结果是聚焦的异常格同时看到"白圈在外、红圈在内"：知道焦点在哪，
+   也没丢掉"这格异常"。
+
+   黄虚线那一档聚焦时让位。它是三档里最弱的一档（显著但幅度不够、不用动手），
+   且 aria-label 里已经写了结论，读屏不受影响；异常才是必须有视觉兜底的那一档。
+   必须在 .is-anom / .is-trivial 之后声明：三者优先级同为 0,2,0，靠源码顺序决胜。 */
+.bi-heat-c:focus-visible {
+  outline: 2px solid var(--fg);
+  outline-offset: 0;
+  z-index: 3;
+}
+.bi-heat-c.is-anom:focus-visible {
+  box-shadow: inset 0 0 0 1.5px var(--bad);
+}
+.bi-heat-wk.is-link {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.bi-heat-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10px;
+  color: var(--fg-4);
+}
+.bi-lg-item { display: inline-flex; align-items: center; gap: 5px; }
+.bi-lg-item i {
+  width: 13px;
+  height: 9px;
+  border-radius: 2px;
+  display: inline-block;
+}
+.bi-lg-item i.is-anom-box {
+  background: transparent;
+  border: 1.5px solid var(--bad);
+}
+.bi-lg-sep { width: 1px; height: 11px; background: var(--line); }
+.bi-lg-note { color: var(--fg-3); }
+
+.bi-card-hint { font-size: 10px; color: var(--fg-4); }
+
+/* ---------------------------------------------------------------- 排序表 */
+
+.bi-table th.bi-th-sort {
+  cursor: pointer;
+  user-select: none;
+  transition: color .12s var(--ease);
+}
+.bi-table th.bi-th-sort:hover { color: var(--accent); }
+.bi-sort-mark {
+  margin-left: 4px;
+  font-size: 9px;
+  color: var(--fg-4);
+  /* 【不要用 opacity 做"弱化"】
+     原来这里写 opacity: .5，实测对比度只剩 1.84 ——
+     等于把"这列可排序"这个唯一的提示彻底抹掉。
+     弱化应该用颜色，不是用透明度：透明度会连可读性一起削掉。 */
+}
+.bi-sort-mark.on { color: var(--accent); opacity: 1; }
+
+.bi-cell-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.bi-mini {
+  /* 【给一个固定宽度】否则表格列宽会随数据跳动，
+     排序一变整张表就"抖"一下，非常干扰阅读。 */
+  width: 46px;
+  height: 5px;
+  background: rgba(255, 255, 255, .04);
+  /* 这里原本写死 2px，后面又有一条 `.pg-bar, .bi-mini { var(--r-pill) }` 盖掉它 ——
+     同一条规则被写了两遍、取值还不一样，是最难查的那种。直接对齐 pill。 */
+  border-radius: var(--r-pill);
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+/* 5px 高的迷你条用 --r-pill（半圆头），不用 --r-bar：
+   6px 在 5px 高的条上会被裁成 2.5px，和药丸等价，但写 pill 意图更清楚。
+   填充条 inherit 父级圆角 —— 否则轨道是圆头、填充是方头，
+   两个圆角不一致，短条时右端会明显露出一块直角。 */
+.bi-mini-f { height: 100%; border-radius: inherit; }
+.bi-mini-f.t-bad { background: var(--bad); }
+.bi-mini-f.t-accent { background: var(--accent); }
+.bi-mini-f.t-good { background: var(--good); }
+.bi-mini-f.t-info { background: var(--info); }
+.bi-empty {
+  padding: 22px 14px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--fg-4);
+}
+
+/* ---------------------------------------------------------------- 范围切换 */
+
+.bi-scope {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  margin-bottom: 11px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r);
+  /* 【不 sticky】这一页本身在 .app-scroll 里滚，
+     sticky 会和主页面头部打架（两层浮层叠在一起）。 */
+}
+.bi-scope-k {
+  font-size: 10px;
+  color: var(--fg-4);
+  letter-spacing: .4px;
+  flex: 0 0 auto;
+}
+.bi-scope-list { display: flex; gap: 4px; flex-wrap: wrap; }
+.bi-scope-i {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--bg-sub);
+  color: var(--fg-3);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 3px 11px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all .13s var(--ease);
+  white-space: nowrap;
+}
+.bi-scope-i:hover { color: var(--fg); border-color: var(--line-hard); background: var(--panel-2); }
+.bi-scope-i.on {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.bi-scope-right { margin-left: auto; }
+.bi-scope-hint { font-size: 10.5px; color: var(--fg-4); }
+.bi-scope-hint b { color: var(--fg-2); font-weight: 550; }
+
+.bi-link {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font-size: inherit;
+  font-family: inherit;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  opacity: .85;
+}
+.bi-link:hover { opacity: 1; }
+
+@media (max-width: 1180px) {
+  .bi-bar-row { grid-template-columns: 74px minmax(0, 1fr) 104px; }
+}
+
+/* ---------------------------------------------------------------- 评论页：词云 BI 化 */
+
+.rv-wc-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+/* 浮层里的原话。**要给行高和最大宽度**：
+   评论原句常常三十字以上，不换行会把浮层撑到屏外。 */
+.rv-tip-q {
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line-soft);
+  max-width: 226px;
+  white-space: normal;
+  line-height: 1.65;
+  color: var(--fg-2);
+  font-size: 11px;
+}
+.rv-tip-q .pg-hit {
+  background: rgba(185,154,91, .24);
+  color: var(--warn);
+  font-style: normal;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+
+/* 【折叠区默认收起】
+   浮层解决"随手验证"，折叠区解决"逐条核对"。
+   两个都要，但默认只开一个 —— 全展开就是原来那面 3000px 的文字墙。 */
+.rv-wc-quotes {
+  margin-top: 8px;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 7px;
+}
+.rv-wc-quotes > summary {
+  cursor: pointer;
+  font-size: 10.5px;
+  color: var(--fg-3);
+  user-select: none;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.rv-wc-quotes > summary::-webkit-details-marker { display: none; }
+.rv-wc-quotes > summary::before {
+  content: '▸';
+  font-size: 9px;
+  color: var(--fg-4);
+  transition: transform .13s var(--ease);
+}
+.rv-wc-quotes[open] > summary::before { transform: rotate(90deg); }
+.rv-wc-quotes > summary:hover { color: var(--accent); }
+
+.rv-wc-qlist {
+  margin-top: 9px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(288px, 1fr));
+  gap: 9px 14px;
+}
+.rv-wc-qitem {
+  padding: 6px 8px;
+  background: var(--bg-sub);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--r-sm);
+}
+.rv-wc-qw {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--fg);
+  font-weight: 550;
+  margin-bottom: 4px;
+}
+.rv-wc-qs {
+  font-size: 10.5px;
+  line-height: 1.6;
+  color: var(--fg-3);
+  padding: 2px 0 2px 8px;
+  border-left: 2px solid var(--line);
+}
+.rv-wc-qs .pg-hit {
+  background: rgba(185,154,91, .2);
+  color: var(--warn);
+  font-style: normal;
+  border-radius: 2px;
+}
+
+@media (max-width: 900px) {
+  .rv-wc-qlist { grid-template-columns: 1fr; }
+}
+
+/* ===========================================================================
+   交互与灵动层（v4）
+   ---------------------------------------------------------------------------
+   【为什么单开一层，而不是散回各个组件】
+   动效最容易失控：同一个 hover 在三处写成三个时长、三种幅度，
+   界面就会"有的地方活、有的地方死"。集中在这里的好处是——
+   想统一调节手感，只改本节的 4 个变量，全站一起变。
+
+   【三层反馈，分时触发】
+   只做变色 = 死板；只做位移 = 廉价；三个一起 = "面板被触碰"的物理感。
+   关键是**不要同时发生**：
+     · 0ms    颜色/亮度立刻响应（大脑认为"我按到了"）
+     · 40ms   位移跟上（体现质量感，太快会飘）
+     · 120ms  阴影铺开（最慢，负责"这个东西浮起来了"的余韵）
+   全部 100ms 同时完成的话，看起来像整体平移了一下，反而没有层次。
+
+   【幅度必须小】
+   位移上限 2px、缩放上限 1.012、阴影最多两级。
+   超过这个量，专业工具就开始像消费级 App 的按钮动画了。
+   =========================================================================== */
+
+:root {
+  --lift-hover: -1px;      /* 悬停上浮 */
+  --lift-active: 0px;      /* 按下回位 */
+  --scale-hover: 1.0;      /* 卡片类不上浮，只提亮 */
+  --ring: 0 0 0 1px rgba(255, 255, 255, .10);
+}
+
+/* ------------------------------------------------ ① 全局焦点环 */
+/* 【键盘可达性】
+   灰阶界面里，浏览器默认的蓝色焦点环非常突兀（唯一的彩色），
+   而且很多组件被 outline: none 干掉了，键盘用户会彻底失去位置感，
+   所以这里必须自己画一个。
+
+   【v4.1：从 box-shadow 改成 outline，原因是真出过事故】
+   第一版用双环 box-shadow：
+     box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px rgba(255,255,255,.55);
+   内圈深色打底（在浅色块上也看得见），外圈白色（在深底上看得见），
+   想法是对的。但实测 Tab 到第 1 个元素（侧栏当前选中的「总览」）时
+   **焦点环完全消失**。
+
+   根因是优先级冲突：
+     :focus-visible              → 0,1,0
+     .sidenav-item.on            → 0,2,0   ← 更高
+   我在交互层写了 `.sidenav-item.on { box-shadow: none; }`（为了清掉旧版
+   用 box-shadow 画的左侧竖条，竖条已改用 ::before 渐变），
+   这一条把焦点环一起清掉了。
+   而"当前选中项"恰恰是最需要知道"键盘焦点在不在它上面"的状态。
+
+   改成 outline + outline-offset 后彻底解决：
+   · outline 是独立通道，不会被任何 box-shadow 覆盖
+   · offset 让环落在元素**外侧**，外侧永远是页面深底，
+     所以不需要"内圈深色打底"这一层，白环直接可见
+   · border-radius: inherit 让环跟着元素圆角走（圆润风格要求）
+
+   【只有一个例外】outline-offset 在 overflow:hidden 的容器里会被裁掉。
+   本项目里没有把可聚焦元素放进 overflow:hidden 的地方，所以没处理。 */
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, .78);
+  outline-offset: 2px;
+  border-radius: inherit;   /* 环的光角跟随元素圆角 */
+}
+/* 触屏/鼠标点击不显示环，只有键盘导航才显示 —— 这是 :focus-visible 的定义，
+   但 Windows 上部分浏览器对 button 的处理不一致，显式兜一层更稳 */
+:focus:not(:focus-visible) { outline: none; }
+
+/* ------------------------------------------------ ② 卡片：静止时几乎平的，悬停才浮 */
+.pg-card {
+  border-radius: var(--r);
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+  /* 过渡拆开写：颜色快、阴影慢，制造层次 */
+  transition:
+    border-color var(--t-fast) var(--ease),
+    background var(--t-fast) var(--ease),
+    box-shadow var(--t-slow) var(--ease),
+    transform var(--t-mid) var(--ease);
+}
+.pg-card:hover {
+  border-color: var(--line);
+  /* 【只提亮 1%，不上浮】
+     卡片是页面骨架，一浮动整页都在动，很晕。
+     想表达"这张卡当前被关注"，提亮描边比位移合适得多。 */
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .03) inset;
+}
+
+/* ------------------------------------------------ ③ KPI 格：悬停时数字变亮 */
+.pg-stat {
+  border-radius: var(--r-sm);
+  transition:
+    background var(--t-mid) var(--ease),
+    transform var(--t-mid) var(--ease);
+}
+.pg-stat:hover { background: var(--panel); transform: translateY(var(--lift-hover)); }
+.pg-stat-v { transition: color var(--t-mid) var(--ease), letter-spacing var(--t-mid) var(--ease); }
+.pg-stat:hover .pg-stat-v { letter-spacing: .2px; }
+
+/* ------------------------------------------------ ④ 按钮：浮起 + 按下 */
+.pg-btn, .pg-mini, .send-btn {
+  border-radius: var(--r-sm);
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    transform var(--t-mid) var(--ease),
+    box-shadow var(--t-slow) var(--ease);
+}
+.pg-btn:hover, .pg-mini:hover {
+  transform: translateY(var(--lift-hover));
+  box-shadow: var(--shadow-2);
+}
+/* 按下时**回到原位并压扁一点点** —— 这是"确实按到了"的关键信号。
+   只做 hover 不做 active，点下去的瞬间没有回应，手感是空的。 */
+.pg-btn:active, .pg-mini:active {
+  transform: translateY(var(--lift-active)) scale(.975);
+  box-shadow: none;
+  transition-duration: 60ms;      /* 按下要快，松手才慢 */
+}
+
+/* ------------------------------------------------ ⑤ 表格行：左侧竖条滑出 */
+/* 【表格行的悬停指示条：不能用 tr::before】
+   第一版写的是 .pg-table tr.clickable::before { position: absolute }，
+   实测**完全不显示**（height 恒为 0）。
+   根因：HTML 表格里 <tr> 的 position: relative 不被浏览器支持 ——
+   table-row 是特殊的 display 类型，绝对定位子元素会脱离到
+   最近的非 table 定位祖先，所以伪元素跑到了表格外面。
+
+   改到**第一个 td** 上做左内边条，用 box-shadow 模拟竖条：
+   不占位、不影响列宽，且 td 是正常的 table-cell，阴影一定生效。
+   代价是它只能贴在第一列左边 —— 但视觉上正是想要的效果。 */
+.pg-table tbody tr {
+  transition: background var(--t-fast) var(--ease);
+}
+.pg-table tbody tr.clickable { cursor: pointer; }
+.pg-table tbody tr.clickable td:first-child {
+  transition: box-shadow var(--t-mid) var(--ease), color var(--t-fast) var(--ease);
+  box-shadow: inset 0 0 0 0 transparent;
+}
+.pg-table tbody tr.clickable:hover td:first-child {
+  /* inset 阴影做 2px 竖条；用 spread 控制粗细，
+     配合 border-radius 让两端是圆的（和整体圆润风格一致） */
+  box-shadow: inset 2px 0 0 0 var(--fg);
+}
+.pg-table tbody tr.clickable:active { background: var(--hover); }
+
+/* 【「未归类」不是第 9 个原因，是一次归因失败】
+   它和上面 8 行长得一样，但身份不同：上面每一行都能派活（"破损 → 换包装"），
+   这一行只能派"去做归因"。更麻烦的是它的可再售率是全表最高，
+   横向扫那一列的人会读成"它最值得先管"。
+   所以用一条虚线把它和上面隔开 —— 这是最省事的"这不是同一类东西"信号。
+   不降透明度（那会让 72.4% 看起来像个弱数据）、不换底色
+   （那会和 hover / 钉住态打架，而这两态本身已经有两套底色了）。 */
+.pg-table tbody tr.is-void td {
+  border-top: 1px dashed var(--line-soft);
+}
+
+/* ------------------------------------------------ ⑥ 条形图：悬停延展 + 轨道提亮 */
+.bi-bar-row {
+  border-radius: var(--r-sm);
+  transition:
+    background var(--t-fast) var(--ease),
+    transform var(--t-mid) var(--ease);
+}
+.bi-bar-row.clickable:hover { transform: translateX(2px); }
+.bi-bar-track { transition: background var(--t-mid) var(--ease); }
+.bi-bar-row:hover .bi-bar-track { background: rgba(255, 255, 255, .05); }
+.bi-bar-f { transition: width var(--t-slow) var(--ease), filter var(--t-fast) var(--ease); }
+.bi-bar-row:hover .bi-bar-f:not(.is-ghost) { filter: brightness(1.22); }
+/* 标签超长时 hover 给出全名（DOM 上靠 title，这里只做视觉提示） */
+.bi-bar-row:hover .bi-bar-l { color: var(--fg); }
+
+/* ------------------------------------------------ ⑦ 热力格：悬停时描边 + 放大 */
+.bi-heat-c {
+  transition:
+    outline-color var(--t-fast) var(--ease),
+    transform var(--t-mid) var(--ease-spring),
+    filter var(--t-fast) var(--ease);
+}
+.bi-heat-c:hover {
+  /* 【放大 8%，并用 spring 曲线】
+     热力格只有 18px 宽，纯靠描边很难点准。
+     轻微放大既给了"选中感"，也把命中区域视觉上放大了（实际热区靠 padding 不变，
+     但用户会感觉更好点）。spring 让放大有轻微过冲，手感更"活"。 */
+  transform: scale(1.08);
+  filter: brightness(1.35);
+  z-index: 2;
+  position: relative;
+}
+.bi-heat-c.is-anom:hover { outline-width: 2px; }
+
+/* ------------------------------------------------ ⑧ 分段控件 / 胶囊：滑块感 */
+.bi-seg {
+  border-radius: var(--r-sm);
+  transition: border-color var(--t-mid) var(--ease);
+}
+.bi-seg:hover { border-color: var(--line); }
+.bi-seg-i {
+  border-radius: calc(var(--r-sm) - 3px);
+  transition:
+    color var(--t-fast) var(--ease),
+    background var(--t-mid) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+.bi-seg-i:hover:not(.on) { transform: translateY(-.5px); }
+.bi-seg-i:active { transform: scale(.96); }
+/* 选中项给一点内高光，让"这块被按进去了"更有实体感 */
+.bi-seg-i.on {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 1px 3px rgba(0, 0, 0, .4);
+}
+
+.bi-scope-i {
+  border-radius: var(--r-pill);
+  transition:
+    color var(--t-fast) var(--ease),
+    background var(--t-mid) var(--ease),
+    border-color var(--t-mid) var(--ease),
+    transform var(--t-mid) var(--ease),
+    box-shadow var(--t-slow) var(--ease);
+}
+.bi-scope-i:hover:not(.on) {
+  transform: translateY(var(--lift-hover));
+  box-shadow: var(--shadow-1);
+}
+.bi-scope-i:active { transform: scale(.96); }
+.bi-scope-i.on {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 2px 8px rgba(0, 0, 0, .45);
+}
+
+/* ------------------------------------------------ ⑨ 侧栏导航：hover 有"推一下"的位移 */
+.sidenav-item {
+  border-radius: var(--r-sm);
+  position: relative;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    transform var(--t-mid) var(--ease);
+}
+.sidenav-item:hover { transform: translateX(2px); }
+.sidenav-item:active { transform: translateX(0) scale(.985); }
+/* 选中态的左侧竖条改成"渐变淡出"，比一条硬边更像被点亮 */
+.sidenav-item.on::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 18%; bottom: 18%;
+  width: 2px;
+  border-radius: var(--r-pill);
+  background: linear-gradient(180deg, transparent, var(--fg) 22%, var(--fg) 78%, transparent);
+}
+.sidenav-item.on { box-shadow: none; }
+.sidenav-ico { transition: transform var(--t-mid) var(--ease-spring), color var(--t-fast) var(--ease); }
+.sidenav-item:hover .sidenav-ico { transform: scale(1.12); }
+
+/* ------------------------------------------------ ⑩ 标签类（chip / fchip / wchip） */
+.chip, .pg-fchip, .pg-wchip, .pg-wchip, .pg-code {
+  border-radius: var(--r-pill);
+  transition:
+    background var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    transform var(--t-mid) var(--ease);
+}
+.pg-fchip:hover, .pg-wchip:hover { transform: translateY(var(--lift-hover)); }
+.pg-fchip:active, .pg-wchip:active { transform: scale(.96); }
+.chip.live .dot {
+  /* 呼吸灯：2.4s 的极慢脉冲，暗示"这是活的连接"。
+     周期不能短于 2s —— 常规 0.8s 那种闪烁会分散读数注意力。 */
+  animation: chip-pulse 2.4s var(--ease) infinite;
+}
+@keyframes chip-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, .18); }
+  50%      { box-shadow: 0 0 0 4px rgba(255, 255, 255, 0); }
+}
+
+/* ------------------------------------------------ ⑪ 品牌标：hover 微旋 */
+.brand-mark {
+  border-radius: var(--r-xs);
+  transition: transform var(--t-slow) var(--ease-spring), box-shadow var(--t-slow) var(--ease);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .3);
+}
+.sidenav-brand:hover .brand-mark { transform: rotate(-6deg) scale(1.06); }
+
+/* ------------------------------------------------ ⑫ 数值高亮：悬停时"挑出来" */
+.pg-stat-v, .bi-bar-main, .pg-table td.num, .rv-wc-qw {
+  transition: color var(--t-fast) var(--ease);
+}
+.bi-bar-row:hover .bi-bar-main { color: #fff; }
+.pg-table tbody tr:hover td.num { color: var(--fg); }
+
+/* ------------------------------------------------ ⑬ 折叠区：展开有"落下来"的感觉 */
+.rv-wc-quotes > summary {
+  border-radius: var(--r-xs);
+  padding: 2px 4px;
+  margin: -2px -4px;
+  transition: color var(--t-fast) var(--ease), background var(--t-fast) var(--ease);
+}
+.rv-wc-quotes > summary:hover { background: var(--panel-2); }
+.rv-wc-qlist { animation: unfold var(--t-slow) var(--ease); }
+@keyframes unfold {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ------------------------------------------------ ⑭ tooltip：跟随而不滞后 */
+.bi-tip {
+  border-radius: var(--r);
+  animation: tip-in var(--t-fast) var(--ease-out);
+  /* 【不要加 transition 到 transform】
+     浮层是跟着鼠标跑的，任何过渡都会让它"拖尾"，
+     看起来像卡顿。只对 opacity 做入场。 */
+}
+@keyframes tip-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ------------------------------------------------ ⑮ 加载态：骨架呼吸 */
+.pg-loading, .spinner { transition: opacity var(--t-mid) var(--ease); }
+
+/* ------------------------------------------------ ⑯ 尊重系统的"减少动效" */
+/* 【这不是可选的】
+   系统级开了"减少动画"的用户（前庭功能障碍、偏头痛患者）会因为
+   视差、缩放、脉冲而生理不适。这里必须整体降级到"只变色不位移"。 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .pg-card:hover, .pg-stat:hover, .pg-btn:hover, .pg-mini:hover,
+  .sidenav-item:hover, .bi-bar-row:hover, .pg-fchip:hover,
+  .pg-wchip:hover, .bi-scope-i:hover, .bi-heat-c:hover {
+    transform: none !important;
+  }
+}
+
+/* ===========================================================================
+   圆润化层（v4）
+   ---------------------------------------------------------------------------
+   【为什么不在原定义上直接改】
+   2642 行 CSS 里散着 42 处写死的 border-radius，逐个改原定义既难review
+   也没法一键回滚。统一在这一节覆盖，好处是：想调"圆到什么程度"只改这里，
+   想退回硬朗风格删掉整节即可。
+
+   【哪些放大、哪些不动】
+   · 放大：所有"会被注视或点击"的面 —— 卡片、按钮、标签、图标底、输入框
+   · 不动：所有"表达数据精度"的小色块（图例方块 2px、热力格 2px）
+     这些一旦放大就失去"刻度感"，读者会以为是装饰而不是数据。
+   =========================================================================== */
+
+/* 图标容器：从小方块变圆角方块，视觉上更"软" */
+.cap-ico      { border-radius: 8px; }
+.step-ico     { border-radius: 9px; }
+.act-n        { border-radius: 8px; }
+
+/* 标签类：统一成小胶囊。胶囊比方块更"活"，也更适合中文短词 */
+.tag          { border-radius: var(--r-pill); padding: 1px 7px; }
+.badge        { border-radius: var(--r-pill); }
+.tool-pill    { border-radius: var(--r-pill); }
+.pg-code      { border-radius: var(--r-pill); }
+.hint-row kbd { border-radius: 5px; }
+
+/* 条形图：圆角提到 6px。原来 3px 在高 20px 的轨道上显得很"方"
+   统一走 --r-bar，理由见变量定义处（分叉过两次）。 */
+.bar-track    { border-radius: var(--r-bar); }
+.bar-fill     { border-radius: var(--r-bar); }
+.stack-bar, .stack-seg { border-radius: var(--r-bar); }
+
+/* 进度/占比条里最细的那档：保持小圆角，否则 4px 高的条会变成椭圆 */
+.pg-bar, .bi-mini { border-radius: var(--r-pill); }
+
+/* 输入区：圆角 + 内阴影，让"可以输入"这件事更明显 */
+.composer textarea {
+  border-radius: var(--r);
+  transition: border-color var(--t-mid) var(--ease), background var(--t-mid) var(--ease),
+              box-shadow var(--t-mid) var(--ease);
+}
+.composer textarea:focus {
+  border-color: var(--line-hard);
+  background: var(--panel);
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, .04);
+}
+.send-btn { border-radius: var(--r-sm); }
+
+/* 推理链步骤：悬停时整行"抬起"，因为这是最常被点开的地方 */
+.step-main {
+  border-radius: var(--r-sm);
+  transition: background var(--t-fast) var(--ease), transform var(--t-mid) var(--ease);
+}
+.step-main:hover { transform: translateX(1.5px); }
+
+/* 动作卡：整块可点，悬停给足反馈 */
+.act {
+  border-radius: var(--r);
+  transition: border-color var(--t-mid) var(--ease), background var(--t-fast) var(--ease),
+              transform var(--t-mid) var(--ease), box-shadow var(--t-slow) var(--ease);
+}
+.act:hover {
+  transform: translateY(-1.5px);
+  box-shadow: var(--shadow-2);
+}
+.act:active { transform: translateY(0) scale(.994); transition-duration: 60ms; }
+
+/* 顶栏：加一条极淡的底部投影，让"顶栏浮在内容上"成立 */
+.topbar {
+  border-bottom: 1px solid var(--line-soft);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, .02), 0 6px 18px -12px rgba(0, 0, 0, .8);
+}
+
+/* ===========================================================================
+   条形亮度分级（v4）
+   ---------------------------------------------------------------------------
+   【为什么条形要用"亮度"而不是"颜色"表达大小】
+   原来所有条都是红色（--bad），结果是：
+   · 一整片原因榜全是红条，半个屏幕是暖色 —— 灰阶方案当场破功
+   · 每根都是红的，等于没有区分；读者无法从颜色读出"哪根最重"
+
+   改成三档灰之后：
+   · 最亮的那根 = 数值最大 = 最该看的那一项，**不需要图例**
+   · 全屏只剩一个色阶，画面立刻安静下来
+   · 需要方向语义的地方（偏离、损失）由**数值本身的 t-bad/t-good 文字**
+     承担，而不是靠整根条的底色
+
+   三档的明度差控制在 18% 左右：一眼能分出层次，又不至于像三个不同的东西。
+   =========================================================================== */
+
+.bi-bar-f.t-hi {
+  background: linear-gradient(90deg, rgba(242, 242, 243, .62), rgba(242, 242, 243, .92));
+}
+.bi-bar-f.t-mid {
+  background: linear-gradient(90deg, rgba(200, 200, 204, .38), rgba(200, 200, 204, .58));
+}
+.bi-bar-f.t-lo {
+  background: linear-gradient(90deg, rgba(140, 140, 146, .26), rgba(140, 140, 146, .40));
+}
+
+/* 悬停时统一提亮，不改变分级关系（只整体 +12% 亮度） */
+.bi-bar-row:hover .bi-bar-f.t-hi  { filter: brightness(1.10); }
+.bi-bar-row:hover .bi-bar-f.t-mid { filter: brightness(1.22); }
+.bi-bar-row:hover .bi-bar-f.t-lo  { filter: brightness(1.38); }
+
+/* 迷你条同理：表格里的量级提示用统一灰，不做分级（它只是"有没有"的示意） */
+.bi-mini-f.t-hi, .bi-mini-f.t-mid, .bi-mini-f.t-lo {
+  background: var(--fg-3);
+}
+
+/* 【热力图配色重做】
+   原来红/青双向，在灰阶方案里它成了全页唯一的大面积彩色。
+   但热力图**必须**保留方向语义（恶化 vs 改善），所以不能全灰。
+   折中：把两个方向都压成"极低饱和 + 靠亮度区分强弱"：
+     · 恶化 → 灰红（暖灰），强度靠不透明度
+     · 改善 → 灰绿（冷灰），强度靠不透明度
+     · 持平 → 几乎透明
+   两者都接近灰，混在一起不会跳，但方向仍然可辨。
+   另外把满色不透明度从 0.77 降到 0.52，避免出现"深红斑块"。 */
+.bi-heat-c { transition: outline-color var(--t-fast) var(--ease), transform var(--t-mid) var(--ease-spring); }
+.bi-heat-legend i { border-radius: 3px; }
+
+
+/* 问答页词云：与 BiKit 的 HBars 同一套三档灰 */
+.wc-fill.is-hi  { background: linear-gradient(90deg, rgba(242,242,243,.62), rgba(242,242,243,.92)); }
+.wc-fill.is-mid { background: linear-gradient(90deg, rgba(200,200,204,.38), rgba(200,200,204,.58)); }
+.wc-fill.is-lo  { background: linear-gradient(90deg, rgba(140,140,146,.26), rgba(140,140,146,.40)); }
+
+/* ===========================================================================
+   读屏专用内容（v4.4）
+   ---------------------------------------------------------------------------
+   【为什么不能用 display:none 或 visibility:hidden】
+   两者都会让元素从无障碍树里彻底消失 —— 读屏软件**完全跳过**，
+   等于什么都没做。这是最经典的"以为做了无障碍"的错误写法。
+
+   正确做法：把元素移到视口外 1px 的裁剪区里。
+   它在无障碍树里正常存在、能被朗读，但视觉上占 0 面积。
+
+   【为什么不用 left:-9999px】
+   老写法。问题是在 RTL 布局里方向反了会盖住内容，而且
+   万一父元素有 overflow 或者被 transform 影响，会留下一条可滚动区域。
+   clip-path + 1px 尺寸是现在最稳的写法。
+   =========================================================================== */
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 【焦点时不要藏】某些场景下 sr-only 元素需要能拿到焦点
+   （比如"跳到主内容"链接）。本项目暂时没有这类元素，
+   但保留这条规则，避免以后加了却看不见焦点在哪。 */
+.sr-only:focus-visible {
+  position: fixed;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 6px 12px;
+  clip: auto;
+  clip-path: none;
+  white-space: normal;
+  background: var(--raise);
+  color: var(--fg);
+  border: 1px solid var(--line-hard);
+  border-radius: var(--r-sm);
+  z-index: 9999;
+}
+
+/* ===========================================================================
+   触控目标最小尺寸（v4.4 · WCAG 2.2 SC 2.5.8，AA 级要求 24×24 CSS px）
+   ---------------------------------------------------------------------------
+   实测三处不达标：
+     · .bi-seg-i     39×20   （分段控件"退货率/变化/订单"）
+     · .bi-scope-i   46×23   （范围胶囊"全店/服饰/生鲜"）
+     · .pg-dot-g     20×18   （折线图异常周圆点）
+
+   【为什么不用加 padding】
+   加 padding 会把按钮撑高，视觉重量立刻变重 ——
+   一排 7 个分段按钮会从"轻量切换器"变成"一排厚标签"，
+   这是用可访问性当借口破坏设计，不能这么做。
+
+   【正确做法：透明伪元素把命中区撑开，视觉尺寸一点都不变】
+   伪元素是子节点，点击冒泡到按钮本身，行为完全一致。
+   视觉上它完全透明，用户看到的高度仍是 20/23px，
+   但手指或鼠标有 24px 的容错范围。
+
+   【为什么只对它俩做，不给圆点做】
+   圆点所在折线图 52 周，周间距实测约 20px。
+   热区撑到 24px 会让相邻两周的命中区重叠 → 点 W23 却跳到 W24。
+   **宁可尺寸不达标，也不能点错** —— 这是 SC 2.5.8 的 spacing 例外
+   明确允许的情形（目标密集到无法同时满足）。
+   圆点的替代可达路径已经做了：键盘 Tab + 回车，且带完整 aria-label。
+   =========================================================================== */
+
+.bi-seg-i,
+.bi-scope-i {
+  position: relative;
+}
+
+/* 伪元素只负责命中区，不参与任何视觉渲染 */
+.bi-seg-i::after,
+.bi-scope-i::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  /* max() 保证"不小于 24px"，同时不压缩本来就够高的按钮 */
+  height: max(100%, 24px);
+  transform: translateY(-50%);
+  border-radius: inherit;
+  /* 透明但仍可点击：不能写 pointer-events: none，
+     否则就失去意义了。透明靠 background: transparent 实现。 */
+  background: transparent;
+}
+
+/* 【横向也要够】胶囊本身 46px 够宽，分段按钮最窄 39px 也够，
+   但文字更短时（比如"z"）会变窄，所以补一个最小宽度。
+   用 min-width 而不是 padding：不影响内部文字居中。 */
+.bi-seg-i { min-width: 24px; }
+
+/* ===========================================================================
+   强制高对比度模式（Windows 高对比度 / forced-colors: active）
+   ---------------------------------------------------------------------------
+   【为什么单列一节，而且这是"数据会不会消失"级别的问题】
+
+   forced-colors 会强制覆盖 background / background-image / color /
+   border-color / fill / stroke 等属性，把页面替换成用户选定的
+   高对比配色（通常是白底黑字或黑底黄字）。
+
+   v4 的整套设计是"用亮度区分元素"：
+     条形   = background: linear-gradient(三级灰)
+     热力格 = background: rgba(...)
+     折线   = stroke: var(--accent)
+
+   实测后果（截图核对过，不是推测）：
+     折线     stroke 仍是 rgb(242,242,243) —— **白线画在白底上，整条线消失**
+     条形     backgroundImage 变 none —— 三档灰全合并，只剩虚线轮廓
+     热力格   208 格全部白色 —— **数据完全丢失**
+     页面     --bg #0b0b0c 被覆盖成白底黑字
+
+   【为什么不写 forced-color-adjust: none】
+   这是最容易被想到的"修法"，但方向是错的：
+   它保住我的浅灰色，而用户开了高对比正是因为**看不见浅灰**。
+   结果是在白底上画一片浅灰 —— 比不修更糟。
+   这个属性的正确用途是保住"必须靠颜色传达信息"的地方，
+   而本项目恰恰属于这一类，所以下面**逐个元素换用系统颜色**，
+   而不是整体关掉适配。
+
+   【核心技巧：用 opacity 保住"深浅"】
+   forced-colors 不覆盖 opacity。
+   所以"颜色深浅编码数据"的地方（热力格、条形分档）改成
+   单一 CanvasText 底色 + 不同 opacity —— 黑白模式下依然是深浅。
+   =========================================================================== */
+
+@media (forced-colors: active) {
+  /* ---- 1. 折线图：白线换系统前景色，这是最致命的一处 ---- */
+  .pg-chart-svg path[stroke] {
+    /* !important 是必须的：stroke 写在内联属性上，普通选择器压不住 */
+    stroke: CanvasText !important;
+  }
+  /* 面积渐变的填充在 HC 下没有意义，去掉避免糊住折线 */
+  .pg-chart-svg path[fill^="url("] {
+    fill: none !important;
+  }
+  /* 异常周圆点：外圈用画布色、内芯用前景色，保证在白底黑底都看得出层次 */
+  .pg-dot-g circle {
+    fill: CanvasText !important;
+    stroke: Canvas !important;
+  }
+  /* 坐标轴/网格线降到 GrayText，别和主折线抢 */
+  .pg-chart-svg line,
+  .pg-chart-svg text {
+    stroke: GrayText !important;
+    fill: GrayText !important;
+  }
+  /* 光标准星也走系统色：写死 rgba 白线在白底主题上直接消失，
+     而这个模式恰恰是"必须看得见"的模式。 */
+  .pg-cross { stroke: CanvasText !important; }
+  .pg-cursor-dot { fill: CanvasText !important; stroke: Canvas !important; }
+
+  /* 【框选的压暗遮罩在 HC 下必须去掉】
+     它的作用是"把没选中的压暗、让选中的浮出来"，
+     而高对比度用户要的正是最高对比 —— 半透明黑幕恰恰在降低对比。
+     选区本身改用系统 Highlight 色描边，边界照样清楚，且不用压暗任何内容。 */
+  .pg-sel-mask { display: none !important; }
+  .pg-sel-box {
+    fill: none !important;
+    stroke: Highlight !important;
+    stroke-width: 2 !important;
+  }
+  /* 两根边界竖线要单独提出来：下面的 `.pg-chart-svg line → GrayText`
+     会把它一起降成灰（那是给网格线用的），选区边界不能跟着变灰。 */
+  .pg-chart-svg line.pg-sel-edge { stroke: Highlight !important; }
+  /* 联动的列高亮：HC 下 box-shadow 会被**整条丢弃**（实测 boxShadow: none），
+     写 !important 也留不住 —— 因为 forced-colors 是在计算值层面清掉它的，
+     和选择器优先级无关。
+
+     所以换一条能活下来的通道：伪元素 + border。
+     border 在 HC 下的宽度和存在性都保留，只有颜色被换成系统色。
+
+     【但颜色被抹平之后，它和"异常周红框"撞车了】
+     实测：异常周 outline 2px solid 黑、联动 border 2px solid 黑 ——
+     两者在 HC 下长得几乎一样，而它们的含义相反：
+     一个是"这格的数据异常"，一个是"你正在看这一列"。
+     HC 下唯一还能自由支配的通道是**线型**：
+       异常周 = 实线（它是要紧的事，用最实心的语言）
+       联动   = 虚线（它是临时的高亮，随鼠标走，不该看起来同样权威）
+     ::before 已经被着色层占用，这里用 ::after。 */
+  .bi-heat-c.is-link::after {
+    content: '';
+    position: absolute;
+    inset: -2px;
+    border: 2px dashed CanvasText;
+    border-radius: 3px;
+    pointer-events: none;
+  }
+  /* 表头用下划线而不是颜色：color 会被强制成 CanvasText，
+     和普通表头完全一样，靠颜色区分等于没做。 */
+  .bi-heat-wk.is-link {
+    text-decoration: underline;
+    font-weight: 700;
+  }
+
+  /* ---- 2. 条形图：长度本身就是数据，只要条"看得见"就不丢信息 ---- */
+  /* 三档灰在这里没有意义（会被抹平），但条的**长度**仍然编码数值。
+     所以给一个实心前景色，让长度重新变得可读。 */
+  .bi-bar-f,
+  .bi-bar-f.t-hi,
+  .bi-bar-f.t-mid,
+  .bi-bar-f.t-lo,
+  .bi-bar-f.t-bad,
+  .bi-bar-f.t-good,
+  .bi-bar-f.t-accent {
+    background: CanvasText !important;
+    background-image: none !important;
+  }
+  /* 对比底条（近 12 周）改成描边，和主条区分开 */
+  .bi-bar-f.is-ghost {
+    background: transparent !important;
+    border: 1px dashed CanvasText !important;
+  }
+  .bi-bar-track { background: Canvas !important; border: 1px solid GrayText !important; }
+
+  /* 表格里的小条同理 */
+  .pg-bar-f,
+  .bi-mini-f {
+    background: CanvasText !important;
+    background-image: none !important;
+  }
+  .pg-bar,
+  .bi-mini { background: Canvas !important; border: 1px solid GrayText !important; }
+
+  /* ---- 3. 热力矩阵：唯一"纯靠颜色编码"的图，也是最难救的一处 ----
+     第一版我写的是 background-color: CanvasText + forced-color-adjust: none，
+     实测**完全无效**：读回来的 backgroundColor 是 rgb(0,0,0)、
+     opacity 仍是 1 —— 也就是 208 格全变成实心黑块，深浅信息照样丢。
+     根因：forced-colors 替换 background-color 时会把 rgba 的 alpha 一起抹掉，
+     而 forced-color-adjust: none 只保住颜色值、保不住半透明。
+
+     真正可行的做法：**把强度从颜色里彻底拆出来，用 opacity 表达**。
+     forced-colors 不会覆盖 opacity，所以它是这个模式下唯一还能编码
+     "程度"的通道。色块画在 ::before 上，opacity 只作用于它，
+     父元素的 outline（异常周标记）不受影响。 */
+  .bi-heat-c {
+    background: transparent !important;
+  }
+  .bi-heat-c::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 2px;
+    background: CanvasText;
+    /* --heat-op 由 TSX 按 |z| 算好写下（0.02 ~ 0.46），
+       HC 下就是"灰度深浅"本身。 */
+    opacity: var(--heat-op, 0.3);
+  }
+  /* 异常周：描边是独立于颜色/透明度的通道，两者可以叠加 */
+  .bi-heat-c.is-anom {
+    outline: 2px solid CanvasText !important;
+    outline-offset: -2px;
+  }
+  .bi-heat-c.is-trivial {
+    outline: 1px dotted CanvasText !important;
+    outline-offset: -1px;
+  }
+
+  /* ---- 4. 图例：色块必须还能看出对应关系 ---- */
+  .bi-lg-item i {
+    background: CanvasText !important;
+    border: 1px solid CanvasText !important;
+  }
+  .bi-lg-item i.is-anom-box {
+    background: transparent !important;
+    border: 2px solid CanvasText !important;
+  }
+
+  /* ---- 5. 语义色统一成系统色（HC 下不允许自定义色相） ---- */
+  .pg-stat-v.t-bad,
+  .pg-stat-v.t-warn,
+  .pg-stat-v.t-good,
+  .pg-stat-v.t-info,
+  .pg-table .t-bad,
+  .pg-table .t-good,
+  .pg-table .t-warn,
+  .bi-tip-row b.t-bad,
+  .bi-tip-row b.t-good {
+    color: CanvasText !important;
+  }
+
+  /* 徽章的小色点在 HC 下没有颜色，改成描边小方块，仍能表示"这里有个状态" */
+  .badge::before {
+    background: CanvasText !important;
+    border: 1px solid CanvasText !important;
+  }
+
+  /* ---- 6. 选中态：不能只靠背景色 ---- */
+  /* HC 下 accent 背景会被强制成高亮色，文字可能反白失败。
+     用系统高亮对：Highlight / HighlightText。 */
+  .bi-seg-i.on,
+  .bi-scope-i.on {
+    background: Highlight !important;
+    color: HighlightText !important;
+    border-color: Highlight !important;
+  }
+  .sidenav-item.on {
+    background: Highlight !important;
+    color: HighlightText !important;
+  }
+  .sidenav-item.on::before { background: HighlightText !important; }
+
+  /* ---- 7. 卡片边框：HC 下层次只能靠边框粗细 ---- */
+  .pg-card {
+    border: 1px solid CanvasText !important;
+  }
+}
+
+/* ===========================================================================
+   归因页新增图表：瀑布 / 环形 / 发散 / 象限
+   ---------------------------------------------------------------------------
+   四张图都用「位置 + 长度」编码信息，颜色只做辅助。
+   这样做的直接好处是：高对比度模式下颜色被系统抹平，
+   数据仍然读得出来（项目里折线图和热力图都得为此写特殊处理）。
+   唯独环形图躲不开 —— 它天生靠颜色区分扇区，
+   所以图例里每个扇区都带自己的百分比，颜色只是"帮你对上号"。
+   =========================================================================== */
+
+/* ---------------------------------------------------------------- 瀑布图 */
+.bi-wa { padding: 10px 12px 4px; }
+
+/* 【为什么高度写死】
+   柱子是绝对定位的，父容器高度必须确定，百分比才有参照。
+   自适应高度会让 bottom/height 的百分比失去基，
+   直接表现为"柱子全塌在底部"。 */
+.bi-wa-plot {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  margin-bottom: 2px;
+}
+
+/* 零轴：在这张图里它同时是"改善/恶化"的分界，所以比普通网格线实 */
+.bi-wa-zero {
+  position: absolute;
+  left: 0; right: 0;
+  height: 1px;
+  background: var(--line-hard);
+  z-index: 0;
+}
+
+.bi-wa-col { position: relative; flex: 1 1 0; min-width: 0; }
+
+/* 连接线：把上一节的落点和下一节的起点连起来。
+   用 border-top 而不是 height:1px + background ——
+   虚线在 1px 高度上会被浏览器压成实线。 */
+.bi-wa-conn {
+  position: absolute;
+  left: 50%;
+  right: -50%;
+  border-top: 1px dashed var(--line-hard);
+  z-index: 0;
+}
+
+/* 柱子本体。宽 62% 居中，留出的空隙正好给连接线穿过。
+   圆角走 --r-bar（6px），理由见变量定义处：这里曾经是 2px，
+   是主条形图提到 6px 时漏掉的一处。 */
+.bi-wa-bar {
+  position: absolute;
+  left: 19%;
+  width: 62%;
+  border: 0;
+  padding: 0;
+  border-radius: var(--r-bar);
+  z-index: 1;
+  transition: opacity 120ms var(--ease), filter 120ms var(--ease);
+}
+.bi-wa-bar:disabled { cursor: default; }
+.bi-wa-bar:not(:disabled) { cursor: pointer; }
+/* 正值 = 把退货率往上推 = 恶化；负值 = 拉下来 = 改善。
+   和全站的红/绿语义一致（红涨绿跌）。 */
+.bi-wa-bar.t-bad { background: var(--bad); }
+.bi-wa-bar.t-good { background: var(--good); }
+/* 总计柱：从零起画，是"结果"不是"一项"，用中性实心灰区分。
+   【从"空心框"改成"实心灰"：空心框在宽屏里读起来像图没渲染】
+   上一版是 rgba(242,242,243,.13) 淡底 + 1.5px 近白描边，
+   起因是纯白填充太刺眼。但在 1280 宽的窗口里这根柱子有 150px 高、100px 宽，
+   描边比旁边任何数据柱都亮，于是它成了整张图最抢眼的东西，
+   而中间是空的 —— 读者的第一反应是"这块没画出来"，不是"这是合计"。
+
+   改法：实心中性灰 var(--fg-4)。
+   - 红/绿只留给有方向的数据，灰色天然表示"汇总，没有方向"
+   - 亮度低于描边但高于背景，既不刺眼也不会被当成占位
+   - 读它的方式和读别的柱子一致：看高度
+
+   HC 模式仍保留空心 + 2px 描边（见 4616 行）：那里没有颜色可用，
+   只有描边能把"总计"和"数据"分开。 */
+.bi-wa-bar.is-total {
+  background: var(--fg-4);
+}
+/* 数值为 0 的那一节：保留一条细线，否则读者找不到它，
+   会以为数据缺了一行 */
+.bi-wa-bar.is-zero {
+  background: var(--fg-5) !important;
+  min-height: 2px;
+}
+.bi-wa-bar.on, .bi-wa-bar:not(:disabled):hover { filter: brightness(1.22); }
+.bi-wa-bar.on { box-shadow: 0 0 0 1px var(--accent) ; }
+.bi-wa-bar:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* 数值标签：正值写顶上、负值写底下。
+   统一写顶上会让所有负值挤在零轴附近互相压。 */
+.bi-wa-val {
+  position: absolute;
+  left: 0; right: 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-2);
+  z-index: 2;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.bi-wa-val.up { transform: translateY(-13px); }
+.bi-wa-val.down { transform: translateY(3px); }
+
+.bi-wa-axis {
+  display: flex;
+  border-top: 1px solid var(--line-soft);
+  padding-top: 5px;
+}
+.bi-wa-al {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  font-size: 10.5px;
+  color: var(--fg-3);
+  line-height: 1.35;
+}
+.bi-wa-al > span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bi-wa-al > span.is-total { color: var(--fg); font-weight: 600; }
+.bi-wa-al em {
+  display: block;
+  font-style: normal;
+  font-size: 9.5px;
+  color: var(--fg-4);
+}
+
+/* ---------------------------------------------------------------- 环形图 */
+.bi-donut {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px 16px 16px;
+  flex-wrap: wrap;
+}
+
+.bi-donut-fig {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  flex: 0 0 auto;
+  margin: 0 auto;
+}
+/* 【必须 meet，不能用 none】
+   项目里的折线图用 preserveAspectRatio="none" 来铺满宽度，
+   但那条规则套到圆上就是把圆拉成椭圆。
+   这里用默认的 xMidYMid meet，宁可两侧留白也要圆是圆的。 */
+.bi-donut-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.bi-donut-seg {
+  cursor: pointer;
+  transition: opacity 140ms var(--ease);
+}
+.bi-donut-seg:hover { opacity: 1 !important; }
+
+.bi-donut-mid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.bi-donut-mid b {
+  font-family: var(--mono);
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.1;
+}
+.bi-donut-mid em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--fg-4);
+  margin-top: 2px;
+}
+
+.bi-donut-legend {
+  flex: 1 1 200px;
+  min-width: 0;
+  display: grid;
+  gap: 1px;
+}
+.bi-donut-li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 7px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--fg-3);
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms var(--ease);
+}
+.bi-donut-li:disabled { cursor: default; }
+.bi-donut-li:not(:disabled):hover, .bi-donut-li.on { background: var(--panel-2); }
+.bi-donut-li:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+/* 色块必须跟扇区同色 —— 它是读者把图例和扇区对上的唯一线索 */
+.bi-donut-li i {
+  width: 9px; height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+.bi-donut-n { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bi-donut-li b {
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.bi-donut-li em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--fg-4);
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 斜率图 */
+/* 【为什么整块用相对定位的绝对定位节点，而不是纯 SVG】
+   两端的标签是中文 + 数字，宽度不定；SVG 里要算文字宽度就得测量，
+   而 HTML 直接靠 flex 排。折线用 SVG 画（需要精确到百分比坐标），
+   节点用 HTML 放在同一个百分比位置上。 */
+.bi-slope {
+  padding: 10px 16px 14px;
+}
+.bi-slope-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--fg-4);
+  padding: 0 2px 6px;
+}
+/* "按此项降序"是这张图的读法说明：两列各自降序，
+   所以线的斜率表示名次变化，不是数值变化。 */
+.bi-slope-head em {
+  font-style: normal;
+  margin-left: 5px;
+  opacity: .72;
+}
+.bi-slope-plot {
+  position: relative;
+  margin: 0 4px;
+}
+.bi-slope-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.bi-slope-line {
+  stroke: var(--fg-4);
+  stroke-linecap: round;
+  transition: opacity 140ms var(--ease), stroke 140ms var(--ease);
+}
+.bi-slope-line.on { stroke: var(--accent); }
+
+.bi-slope-node {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 26%;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  color: var(--fg-3);
+  transform: translateY(-50%);
+  cursor: default;
+  transition: opacity 140ms var(--ease);
+}
+.bi-slope-node.l { left: 0; }
+.bi-slope-node.r { right: 0; }
+.bi-slope-node:hover, .bi-slope-node.on { color: var(--fg); background: var(--panel-2); }
+/* 【钉住状态要能一眼看出来】
+   悬停（.on）是"我正在看这一行"，钉住（.is-pick）是"我选定了它"——
+   两者语义不同，不能共用一个样式。钉住用左侧强调竖线，
+   因为这张图左列本来就是"名字"，竖线贴着名字不会挤掉数值。 */
+.bi-slope-node.is-pick {
+  color: var(--fg);
+  background: var(--panel-2);
+  box-shadow: inset 2px 0 0 var(--accent-line);
+}
+.bi-slope-node:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.bi-slope-lab {
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bi-slope-node b {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+}
+.bi-slope-node em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 双环对比 */
+/* 【为什么图例要写成网格而不是 flex 换行】
+   每行有 5 个数字列（名称/条数%/金额%/口径差），flex 换行时各行列宽
+   由内容决定，上下两行的百分比会错开，读者没法竖着比。
+   用 grid 固定列宽，数字天然对齐 —— 而这张图的价值全在"逐行比较"。 */
+.bi-dring {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 14px 16px 16px;
+  flex-wrap: wrap;
+}
+
+.bi-dring-fig {
+  position: relative;
+  width: 190px;
+  height: 190px;
+  flex: 0 0 auto;
+  margin: 0 auto;
+}
+/* 同环形图：必须 meet，否则圆会被拉成椭圆 */
+.bi-dring-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.bi-dring-seg {
+  cursor: pointer;
+  transition: opacity 140ms var(--ease);
+}
+.bi-dring-seg:hover { opacity: 1 !important; }
+
+.bi-dring-mid {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.bi-dring-mid b {
+  font-family: var(--mono);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.1;
+}
+.bi-dring-mid em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--fg-4);
+  margin-top: 3px;
+}
+
+.bi-dring-legend {
+  flex: 1 1 300px;
+  min-width: 260px;
+  display: grid;
+  gap: 1px;
+  align-content: start;
+}
+
+/* 表头：用两个小色块区分内外环，避免读者把两列百分比看反 */
+.bi-dring-head {
+  display: grid;
+  grid-template-columns: 1fr 52px 52px 40px;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 4px;
+  font-size: 9.5px;
+  color: var(--fg-4);
+}
+.bi-dring-head span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.bi-dring-head span:last-child { justify-content: flex-end; }
+/* 外环=空心环，内环=实心块：形状差异比只有颜色差更耐看，
+   高对比度下颜色被抹平后，一个"环"一个"点"仍然分得开 */
+.bi-dring-sw {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.bi-dring-sw.o { border: 1.6px solid var(--fg-4); }
+.bi-dring-sw.i { background: var(--fg-4); }
+
+.bi-dring-li {
+  display: grid;
+  grid-template-columns: 9px 1fr 52px 52px 40px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: none;
+  font: inherit;
+  text-align: left;
+  color: var(--fg-2);
+  cursor: pointer;
+}
+.bi-dring-li i {
+  width: 9px; height: 9px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+.bi-dring-li:disabled { cursor: default; }
+.bi-dring-li:not(:disabled):hover, .bi-dring-li.on { background: var(--panel-2); }
+.bi-dring-li:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.bi-dring-n {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11.5px;
+}
+.bi-dring-li b {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 11.5px;
+  color: var(--fg);
+  text-align: right;
+  white-space: nowrap;
+}
+.bi-dring-li b.dim { color: var(--fg-4); font-weight: 400; }
+.bi-dring-li em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- 堆叠份额条 */
+/* 一条损失拆成「可挽回 / 净损失」两段。
+   网格三列：名称 | 条+比例 | 金额。三条竖线对齐，扫一列就能比。 */
+.bi-ss { padding: 10px 14px 12px; }
+
+.bi-ss-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 10.5px;
+  color: var(--fg-3);
+  padding: 0 0 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.bi-ss-head b {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 4px 0 2px;
+}
+.bi-ss-head em {
+  font-style: normal;
+  font-size: 10px;
+  color: var(--fg-4);
+}
+
+.bi-ss-row {
+  display: grid;
+  grid-template-columns: 116px 1fr 104px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 6px;
+  border-radius: var(--r-xs);
+  /* 可点时才给手型；展示行给手型是骗人 */
+  cursor: default;
+}
+.bi-ss-row[role='button'] { cursor: pointer; }
+.bi-ss-row[role='button']:hover { background: var(--hover); }
+.bi-ss-row.on {
+  background: var(--hover);
+  box-shadow: inset 2px 0 0 var(--accent-line);
+}
+.bi-ss-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+.bi-ss-l {
+  font-size: 11.5px;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bi-ss-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  /* 右侧留出百分比的位置，避免条压到数字上 */
+  padding-right: 34px;
+  min-width: 0;
+}
+/* 底槽=净损失（暗），内段=可挽回（亮）。
+   用亮度差而不是色相差：灰阶界面里色相不可靠。
+   高对比度模式下这两块会被系统色覆盖，但**位置**不变，
+   右侧的百分比也还在，信息不丢。 */
+.bi-ss-bar {
+  height: 14px;
+  border-radius: var(--r-bar);
+  background: var(--bad-dim);
+  overflow: hidden;
+  min-width: 2px;
+}
+.bi-ss-keep {
+  height: 100%;
+  background: var(--good);
+  /* 半透明让底槽的暗红透出来一点，视觉上是"同一条损失的两个部分"，
+     而不是两根独立的条拼在一起。 */
+  opacity: .78;
+}
+.bi-ss-pct {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--fg-4);
+  /* 固定宽度 + 右对齐：一列数字的小数点对齐才扫得动 */
+  min-width: 30px;
+  text-align: right;
+}
+
+.bi-ss-v {
+  font-family: var(--mono);
+  font-size: 11px;
+  text-align: right;
+  white-space: nowrap;
+}
+.bi-ss-v b { color: var(--good-fg); font-weight: 600; }
+.bi-ss-v em {
+  font-style: normal;
+  color: var(--fg-4);
+  font-size: 10px;
+  margin-left: 2px;
+}
+
+/* 高对比度：色块会被系统色吃掉，但条的**长度**和**位置**还在。
+   这里只把描边补上，让"可挽回段"和"净损失段"仍有明确分界。 */
+@media (forced-colors: active) {
+  .bi-ss-bar { border: 1px solid CanvasText; }
+  .bi-ss-keep {
+    background: Highlight;
+    opacity: 1;
+    border-right: 1px solid CanvasText;
+  }
+}
+
+/* ---------------------------------------------------------------- 发散条 */
+.bi-dv { padding: 10px 14px 12px; }
+
+.bi-dv-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9.5px;
+  color: var(--fg-4);
+  padding: 0 0 6px;
+  margin-left: 92px;
+  margin-right: 74px;
+}
+
+.bi-dv-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 0;
+  border-radius: var(--r-sm);
+}
+.bi-dv-row[role="button"] { cursor: pointer; }
+.bi-dv-row[role="button"]:hover, .bi-dv-row.on { background: var(--panel-2); }
+.bi-dv-row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.bi-dv-l {
+  flex: 0 0 82px;
+  font-size: 11.5px;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 轨道：中间那条竖线是零轴。它必须一直看得见 ——
+   这条图的全部信息就是"在零轴哪一边、伸出去多长"，
+   零轴一弱，方向就读不出来了。 */
+.bi-dv-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 14px;
+  min-width: 0;
+}
+.bi-dv-zero {
+  position: absolute;
+  left: 50%;
+  top: -2px; bottom: -2px;
+  width: 1px;
+  background: var(--line-hard);
+}
+/* 【圆角只给远端，零点那一端必须齐平】
+   双向条的起点固定在零轴上，如果把靠 Zero 的一端也倒圆，
+   每根条的根部都会出现一个半圆缺口，看起来像"条没贴住轴"。
+   所以：往右伸的圆右侧，往左伸的圆左侧，6px 在 10px 高的条上
+   正好等于半个圆（浏览器按半径上限裁剪），远端是完全圆头。 */
+.bi-dv-bar {
+  position: absolute;
+  top: 2px; bottom: 2px;
+  transition: filter 120ms var(--ease);
+}
+.bi-dv-row:hover .bi-dv-bar { filter: brightness(1.25); }
+.bi-dv-bar.neg { background: var(--good); border-radius: var(--r-bar) 0 0 var(--r-bar); }
+.bi-dv-bar.pos { background: var(--bad); border-radius: 0 var(--r-bar) var(--r-bar) 0; }
+
+.bi-dv-v {
+  flex: 0 0 64px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.bi-dv-v em {
+  display: block;
+  font-style: normal;
+  font-weight: 400;
+  font-size: 9.5px;
+  color: var(--fg-4);
+}
+
+/* ---------------------------------------------------------------- 象限图 */
+.bi-q { padding: 12px 16px 8px; }
+
+.bi-q-plot {
+  position: relative;
+  border-left: 1px solid var(--line-soft);
+  border-bottom: 1px solid var(--line-soft);
+  margin-left: 8px;
+}
+
+.bi-q-split {
+  position: absolute;
+  background: var(--line-soft);
+  pointer-events: none;
+}
+.bi-q-split.v { top: 0; bottom: 0; width: 1px; }
+.bi-q-split.h { left: 0; right: 0; height: 1px; }
+
+.bi-q-q {
+  position: absolute;
+  font-size: 9px;
+  color: var(--fg-5);
+  pointer-events: none;
+  letter-spacing: .02em;
+}
+
+/* 气泡：用 button 实现，因为它要能 Tab 到达、要能读屏。
+   transform: translate(-50%,-50%) 让 left/top 指向圆心而不是左上角。 */
+.bi-q-dot {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 0;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--bad-dim);
+  box-shadow: 0 0 0 1.5px var(--bad) inset;
+  cursor: pointer;
+  transition: opacity 140ms var(--ease), background 140ms var(--ease);
+  z-index: 1;
+}
+.bi-q-dot:hover, .bi-q-dot.on { background: var(--bad); z-index: 3; }
+/* 【钉住 = 点了要留下痕迹，hover 只是路过】
+   两者视觉必须分开，否则用户分不清"我现在指着它"和"我已经选中了它"。
+   hover 只改填充（填充是短暂的、指哪看哪），
+   pinned 额外加一圈外环 + 抬高 —— 外环比填充更像"固定"，
+   而且不会和被 hover 时的高亮打架。
+   外环用 --accent 而不是 --bad：--bad 是"这个数据有问题"的语义，
+   这里表达的是"你选了它"，是操作状态，不是数据状态。 */
+.bi-q-dot.pin {
+  z-index: 4;
+  box-shadow:
+    0 0 0 1.5px var(--bad) inset,
+    0 0 0 3px var(--accent-line);
+}
+.bi-q-dot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  z-index: 4;
+}
+
+/* 标签默认一直显示 —— 8 个点如果只在悬停时才报名字，
+   读者没法一眼看出"右下角这几个是谁"，得逐个划过去。
+
+   side-l / side-r 决定往哪边伸展：左半边的点标签朝右，右半边朝左，
+   让标签总是伸向更空的那一侧。竖直位置由组件算好（防重叠下压），
+   所以这里不能再写 top: 50%，否则会把算好的值覆盖掉。 */
+/* 【标签是独立一层，不是气泡的子元素】
+   放气泡里的话，子元素的 z-index 只在父级层叠上下文内比较，
+   写多大都压不到旁边那个气泡上面 —— 实测标签会被邻泡盖掉一半。
+   抽成同级独立层后，整层 z-index 高于所有气泡，永不遮挡。 */
+.bi-q-labs {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+.bi-q-lab {
+  position: absolute;
+  transform: translateY(-50%);
+  font-size: 10px;
+  color: var(--fg-3);
+  white-space: nowrap;
+  line-height: 1;
+  /* 标签本身不接收鼠标事件，但悬停气泡时要跟着变亮 */
+  transition: color 120ms var(--ease);
+}
+/* left / transform 都由组件按"气泡坐标 + 半径"算好传进来。
+   这里只保留文字对齐和悬停高亮 ——
+   位置相关的任何 100% 在这里都是错的（100% = 整层宽度，不是气泡）。 */
+.bi-q-lab.side-l { text-align: right; }
+.bi-q-lab.on { color: var(--fg); font-weight: 600; }
+.bi-q-dot.on .bi-q-lab, .bi-q-dot:hover .bi-q-lab {
+  color: var(--fg);
+  font-weight: 600;
+  z-index: 5;
+}
+
+/* 【象限名：四个角各一个，必须绝对定位且不与轴标签抢位置】
+   .bi-q-q 原来没有对应样式，只是继承了 .bi-q-plot 的字体色，
+   而 style 里写的是 right/top/bottom/left —— 靠内联样式才勉强落在四角。
+   问题是**左下角**：轴标签 .bi-q-axes 紧贴在画布外面，
+   而象限名"损失小"在画布内底部，两者垂直距离只有 4px，
+   看起来像三行字叠在一起（"损失小 / 可再售率 / 可再售率"）。
+
+   解法：象限名放进角上但避开边缘 6px，轴标签整体往下挪，
+   两者之间留出 10px 的呼吸。 */
+.bi-q-q {
+  position: absolute;
+  font-size: 9px;
+  line-height: 1;
+  color: var(--fg-5, var(--fg-4));
+  opacity: .72;
+  pointer-events: none;
+  white-space: nowrap;
+  letter-spacing: .2px;
+}
+
+.bi-q-axes {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  /* 原来 6px：象限名的底边到轴标签之间只剩一条缝，读起来是糊的 */
+  margin: 12px 0 0 8px;
+  font-size: 9.5px;
+  color: var(--fg-4);
+}
+.bi-q-yl { order: 0; }
+.bi-q-xl { order: 1; }
+
+/* ------------------------------------------------- 四张图的高对比度处理 */
+@media (forced-colors: active) {
+  /* 瀑布/发散条：位置和长度是唯一的信息通道，只要"看得见"就不丢数据 */
+  .bi-wa-bar.t-bad,
+  .bi-wa-bar.t-good,
+  .bi-wa-bar.is-total { background: CanvasText !important; }
+  /* 改善/恶化在 HC 下颜色没意义了，改用线型：
+     总计柱实心描边，单项柱只有填充。 */
+  .bi-wa-bar.is-total { border: 2px solid CanvasText !important; background: Canvas !important; }
+  .bi-wa-zero, .bi-dv-zero, .bi-q-split { background: CanvasText !important; }
+  .bi-dv-bar.neg, .bi-dv-bar.pos { background: CanvasText !important; }
+
+  /* 象限气泡 */
+  .bi-q-dot {
+    background: CanvasText !important;
+    box-shadow: 0 0 0 2px CanvasText !important;
+  }
+  .bi-q-dot.on, .bi-q-dot:hover { background: Highlight !important; }
+
+  /* 【环形图是唯一躲不开的一处】
+     forced-colors 会把四个扇区的 fill 全抹成同一个颜色，
+     扇区就合成一个实心圆 —— 数据完全丢失。
+     opacity 不受 forced-colors 影响，所以用它重新编码：
+     每个扇区的 --seg-op 由组件按序号给定，形成由亮到暗的梯度，
+     配合扇区之间的缝隙，边界仍然分得清。
+     再加一条：图例里的百分比本来就是文字，HC 下照样能读，
+     所以即使图和图例对不上号，数字也没有丢。 */
+  .bi-donut-seg {
+    fill: CanvasText !important;
+    opacity: var(--seg-op, 1) !important;
+  }
+  .bi-donut-li i { background: CanvasText !important; }
+
+  /* 【双环在高对比度下有个独有的风险】
+     颜色全被抹平之后，内外两环都是同一个 CanvasText，
+     如果透明度也一样，两环就糊成一个粗环 ——
+     "条数 vs 金额"的对比彻底消失，比没有这张图更糟
+     （读者会以为两个口径一模一样）。
+     所以让内环整体比外环暗一档：即便色相被抹掉，
+     "外亮内暗"这个层次还在，两环的边界就读得出来。
+     图例里的两组百分比本来就是文字，数字不会丢。 */
+  .bi-dring-seg {
+    fill: CanvasText !important;
+    opacity: var(--ring-op, 1) !important;
+  }
+  .bi-dring-li i { background: CanvasText !important; }
+  .bi-dring-sw.o { border-color: CanvasText !important; }
+  .bi-dring-sw.i { background: CanvasText !important; }
+
+  /* 斜率图：forced-colors 会把线的 stroke 抹成同一个颜色，
+     但"线的陡峭程度"这个信息由位置承载，不依赖颜色，
+     所以这里只需要保证线还看得见 —— 用 CanvasText 提高对比即可。
+     名次变化的 ↑↓ 箭头是文字，本来就保得住。 */
+  .bi-slope-line { stroke: CanvasText !important; }
+}
+
+/* ===========================================================================
+ * 矩形树图：两级归属的"钱花在哪"
+ *
+ * 【为什么整块用绝对定位 + 百分比，而不用 flex】
+ * 树图的每个格子是"按面积算出来的矩形"，行和列不对齐 ——
+ * 同一行里的格子高度相同但宽度各异，下一行又换一套。
+ * flex/grid 都表达不了这种自由矩形，只有绝对定位能直接落坐标。
+ * 用百分比而不是 px：容器宽度随窗口变，坐标必须跟着缩放，
+ * 否则窄屏上格子会挤到左边、右半边空着。
+ * =========================================================================== */
+.bi-tree {
+  padding: 12px 14px 14px;
+}
+
+/* 【必须有这层滚动容器】
+   只写 min-width 而不给 overflow-x 的话，最小宽度撑出去的部分
+   会被父级直接裁掉 —— 右侧一整列格子消失，且没有滚动条提示。
+   "内容被静默裁掉"比"出现滚动条"糟糕得多：前者读者不知道少了东西。 */
+.bi-tree-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.bi-tree-fig {
+  position: relative;
+  width: 100%;
+  /* 最小宽度兜底：再窄下去标签全挤没了，不如让外面横向滚 */
+  min-width: 420px;
+}
+
+.bi-tree-g {
+  position: absolute;
+  /* 组之间用 padding 制造缝隙，而不是给子元素加 margin ——
+     margin 在百分比定位里会把坐标算歪 */
+  padding: 2px;
+  box-sizing: border-box;
+}
+
+/* 组标题：一行里放"归属名 + 总金额 + 占比"
+   这行是整张图的结论出处 —— 被压平到二级的视图看不到它 */
+.bi-tree-gh {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  height: 17px;
+  padding: 0 2px 2px;
+  font-size: 10.5px;
+  color: var(--fg-3);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.bi-tree-gn {
+  font-weight: 600;
+  color: var(--fg-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bi-tree-gh b {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-2);
+}
+.bi-tree-gh em {
+  font-style: normal;
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--fg-4);
+}
+
+/* 组内画布：再铺一层绝对定位，坐标基准是这个组的矩形 */
+.bi-tree-gb {
+  position: relative;
+  width: 100%;
+  height: calc(100% - 17px);
+}
+
+/* 单个格子是一颗 <button>：能 Tab、能点、能挂 aria-label。
+   默认的按钮样式全部要抹掉，否则会出现灰底圆角和内阴影。 */
+.bi-tree-c {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 1px;
+  padding: 5px 6px;
+  border: 1px solid var(--bg);
+  /* 【树图格子不用 --r-bar(6px)，走 --r-cell(4px)】
+     格子和条不是一回事：
+       · 条是 10–16px 高的细长条，6px 正好是半个圆头，圆得干净
+       · 格子最矮的只有 19px（末端"售后流程问题"那一类），
+         6px 会让它变成胶囊，文字也跟着挤边
+       · 相邻格子之间只有 1px 缝，半径越大，"掐腰"越明显
+     4px 是三者之间的折中：不再像生硬的直角，又不会把格子做成药丸。 */
+  border-radius: var(--r-cell);
+  /* 深色文字：所有格子都取浅灰阶（最暗 #909098），
+     对比度约 5.6:1，够 WCAG AA。
+     不在同一张图里混用浅/深两种字色 —— 那会让"哪个格子更重要"变得可疑。 */
+  color: #151517;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  overflow: hidden;
+  /* 用 inset 阴影做"按下"的体积感，不用 transform：
+     transform 会让绝对定位的子元素重新计算包含块，坐标会漂 */
+  transition: filter 120ms var(--ease), box-shadow 120ms var(--ease);
+  background-clip: padding-box;
+}
+.bi-tree-c:hover {
+  filter: brightness(1.06);
+}
+.bi-tree-c:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+  z-index: 2;
+}
+.bi-tree-c.on {
+  /* 选中态用外描边而不是加深颜色：
+     加深会和"同组内按金额给透明度"的编码打架 */
+  box-shadow: inset 0 0 0 2px var(--accent);
+  z-index: 1;
+}
+
+.bi-tree-cl {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.25;
+  /* 窄格子里必须允许截断，否则文字会溢出到邻格上 */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bi-tree-cv {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  opacity: .82;
+}
+.bi-tree-cs {
+  font-size: 9.5px;
+  opacity: .62;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 【格子太矮时，按高度逐级砍内容 —— 不要让它从中间截断】
+   一个格子要塞三行（原因名 / 金额 / 条数+可再售），
+   合计约 50px。树图按金额分配面积，末尾那几个小格只有 30~40px 高，
+   而 .bi-tree-c 是 overflow:hidden —— 于是第二行"1.8万"只露上半截，
+   看起来像渲染坏了，而不是"这里放不下"。
+
+   用容器查询按格子自身高度决定显示到第几行：
+     < 52px  去掉第三行（条数 · 可再售），它本来就能在浮层里看到
+     < 40px  再去掉金额，只留原因名
+   两级都是"少显示一行"，不是"截断一行" —— 半行字比没有更糟。
+
+   为什么用容器查询而不是 JS 测量：格子的高度是百分比算出来的，
+   窗口一缩放就得重算，ResizeObserver 要挂 N 个观察者。
+   容器查询是浏览器自己做的，零 JS、零重排。 */
+.bi-tree-c { container-type: size; }
+@container (max-height: 52px) {
+  .bi-tree-cs { display: none; }
+}
+@container (max-height: 40px) {
+  .bi-tree-cv { display: none; }
+  /* 只剩一行时，让它自己垂直居中。
+     注意不能写 `.bi-tree-c { justify-content: center }` ——
+     容器查询只能命中容器的**后代**，样式容器自身是无效的
+     （写在里面不报错，只是静默不生效，很容易误以为改好了）。
+     用子元素的 margin auto 达到同样效果。 */
+  .bi-tree-cl { margin-block: auto; }
+}
+/* 【比 25px 还矮：一行字也塞不下，干脆不显示】
+   格子上下各 5px 内边距，加一行 11px/1.25 的行盒（13.75px），
+   最少需要 24px。实测最小的两个格子（售后流程问题、其余未单列）
+   只有 19px —— 当时的表现是**原因名被压成 7px 高**：
+   flex 的默认 flex-shrink:1 在负剩余空间里把文字框压扁了，
+   scrollHeight 还等于 clientHeight，所以任何"溢出检测"都查不出来。
+   屏幕上看到的是半行字，正是上面注释里说的"半行字比没有更糟"。
+
+   所以：< 25px 连原因名也不画，格子退化成一块纯色 ——
+   树图的阅读顺序本来就是先看面积再挑格子，小格子不写字是常规做法，
+   全称在 aria-label 与浮层里，读屏和鼠标都拿得到。
+
+   顺带给三个文字元素加 flex: none：文字要么整行显示，
+   要么整行不显示，不允许被布局压扁。 */
+.bi-tree-cl, .bi-tree-cv, .bi-tree-cs { flex: none; }
+@container (max-height: 25px) {
+  .bi-tree-cl { display: none; }
+}
+
+/* 高对比度模式：颜色会被强制抹平，格子会全部变成同一个底色，
+   面积还在（那是布局属性，不会被覆盖），但分组边界没了。
+   用 border 把边界找回来 —— box-shadow 在 forced-colors 下会被丢弃，
+   border 不会（见 app.css 里 forced-colors 段的同类处理）。
+   组内的强弱改用 opacity，它是这个模式下唯一还能编码"程度"的通道。 */
+@media (forced-colors: active) {
+  .bi-tree-c {
+    background: Canvas !important;
+    border: 1px solid CanvasText !important;
+    color: CanvasText !important;
+    opacity: var(--cell-op, 1);
+  }
+  .bi-tree-c.on {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  .bi-tree-gh b,
+  .bi-tree-gn { color: CanvasText !important; }
+}
+
+/* ---------------------------------------------------------------- 哑铃图 */
+.bi-db { padding: 4px 0 0; }
+
+/* 顶部刻度：共用一把尺。刻度文字绝对定位到 0/25/50/75/100%，
+   两端各收一格，避免最左/最右的数字被卡片边裁掉。 */
+.bi-db-axis {
+  display: flex;
+  height: 14px;
+  margin: 0 0 2px;
+  font-size: 9px;
+  font-family: var(--mono);
+  color: var(--fg-4);
+}
+/* 和 .bi-db-row 的两列严格同宽，刻度才能和点对齐 */
+.bi-db-axis-in {
+  position: relative;
+  flex: 1 1 auto;
+  margin-left: 96px;
+  margin-right: 104px;
+}
+.bi-db-tick {
+  position: absolute;
+  transform: translateX(-50%);
+  white-space: nowrap;
+}
+.bi-db-tick:first-child { transform: none; }
+.bi-db-tick:last-child { transform: translateX(-100%); }
+
+.bi-db-plot {
+  position: relative;
+  border-top: 1px solid var(--line-soft);
+}
+
+.bi-db-row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  transition: opacity 140ms var(--ease);
+}
+/* 【三列：名字 96px · 绘图区自适应 · 数值 104px】
+   之前用负边距把名字/数值推到 .bi-db-plot 的 margin 外，
+   结果被卡片裁掉了右半边 —— 屏幕上显示的是"+8"，
+   而真实值是"+8.83pp"。**被静默截断的数字比缺一行更危险**：
+   读者会把它当真值，而且完全不会怀疑。
+   现在改成 flex 三列，名字和数值是真正的列，不靠定位逃出去。 */
+.bi-db-name { flex: 0 0 96px; }
+.bi-db-val  { flex: 0 0 104px; }
+.bi-db-track {
+  position: relative;
+  flex: 1 1 auto;
+  height: 100%;
+}
+/* 行分隔线：用伪元素画在行的中线偏下，不额外加一个 div */
+.bi-db-row::after {
+  content: '';
+  position: absolute;
+  left: 96px;
+  right: 104px;
+  bottom: 0;
+  height: 1px;
+  background: var(--line-soft);
+  opacity: .5;
+}
+.bi-db-row:last-child::after { display: none; }
+
+.bi-db-name {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: var(--fg-2);
+  padding: 0 8px 0 10px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  border-radius: 3px;
+}
+.bi-db-name:hover, .bi-db-row.on .bi-db-name { color: var(--fg); }
+.bi-db-row.is-pick .bi-db-name {
+  color: var(--fg);
+  box-shadow: inset 2px 0 0 var(--accent-line);
+}
+.bi-db-name:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.bi-db-lab {
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 连线：两端透明、中间实——视觉上把两个点"绑"在一起，
+   而不是从 A 指向 B 的箭头。方向感由点的位置自己提供。 */
+.bi-db-link {
+  position: absolute;
+  height: 2px;
+  border-radius: 1px;
+  pointer-events: none;
+}
+.bi-db-link.up { background: linear-gradient(90deg, var(--line-hard), var(--bad-line)); }
+.bi-db-link.down { background: linear-gradient(90deg, var(--line-hard), var(--good)); }
+
+/* 点：基准空心、本周实心。形状差是给色弱读者的第二通道。 */
+.bi-db-dot {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  top: 50%;
+  pointer-events: none;
+  box-sizing: border-box;
+}
+.bi-db-dot.is-base {
+  background: transparent;
+  border: 1.5px solid var(--fg-4);
+}
+.bi-db-dot.is-now { border: 1.5px solid var(--bg); }
+.bi-db-dot.is-now.up { background: var(--bad); }
+.bi-db-dot.is-now.down { background: var(--good); }
+.bi-db-dot.is-now.on { box-shadow: 0 0 0 3px var(--accent-glow); }
+
+.bi-db-val {
+  padding-right: 10px;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+.bi-db-val b { font-weight: 600; }
+.bi-db-val em { font-style: normal; font-size: 9.5px; color: var(--fg-4); }
+
+.bi-db-legend {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 8px 0 0 96px;
+  font-size: 9.5px;
+  color: var(--fg-4);
+}
+.bi-db-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.bi-db-lg {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  box-sizing: border-box;
+  display: inline-block;
+}
+.bi-db-lg.is-base { border: 1.5px solid var(--fg-4); }
+.bi-db-lg.is-now.up { background: var(--bad); }
+.bi-db-lg.is-now.down { background: var(--good); }
+.bi-db-lg-note { margin-left: auto; }
+
+/* ===========================================================================
+   ⑨ 预警 · 策划页
+   ---------------------------------------------------------------------------
+   这一页是"看懂 → 派活"的最后一跳，所以版式上刻意分成四段、自上而下读：
+      KPI（这一周有多严重）→ 预警清单（还有哪几周）→ 拆解（谁推上去的）
+      → 策划方案（谁去做什么）
+   不把"策划方案"塞进两栏：动作表有 4 列，挤在半屏里会折行折到看不清。
+   =========================================================================== */
+
+/* ------------------------------------------------ 类目贡献（谁推上去的） */
+/* 四列：类目 / 条形 / 数值 / 明细。
+   数值列必须 tabular-nums —— 否则每行小数点不对齐，扫读时看不出谁大，
+   而这一栏存在的唯一目的就是"一眼比出大小"。 */
+.pg-contrib { display: flex; flex-direction: column; gap: 9px; }
+.pg-contrib-r {
+  display: grid;
+  grid-template-columns: 52px 1fr 78px auto;
+  align-items: center;
+  gap: 10px;
+  /* 【可点行必须给"能动"的信号】
+     上一版没有 hover 反馈，鼠标放上去毫无变化 —— 用户原话"像半成品"。
+     底色 + 左缘亮条 + 类目名提亮三件事一起动，扫过时行是"活"的。 */
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: -6px -8px;      /* padding 外扩命中区，视觉占位不变 */
+  text-align: left;
+  background: transparent;
+  cursor: pointer;
+  transition: background .14s ease;
+  font: inherit;
+  color: inherit;
+  width: calc(100% + 16px);
+}
+.pg-contrib-r:hover { background: rgba(255,255,255,.05); }
+.pg-contrib-r.is-on { background: var(--accent-dim, rgba(255,255,255,.08)); }
+.pg-contrib-k {
+  font-size: 12px;
+  color: var(--fg);
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* 自绘条形：PageKit 的 Bar 是"黑红渐变"，在暗底上像断条（用户截图里的样式 bug）。
+   这里和方案区排行的 HBars 用同一种语言：浅→深单色渐变，宽度即数值。 */
+.pg-contrib-b { min-width: 0; }
+.pg-contrib-track {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.07);
+  overflow: hidden;
+}
+.pg-contrib-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(194,102,99,.5), var(--bad));
+  transition: width .35s cubic-bezier(.2,.7,.3,1);
+}
+.pg-contrib-v {
+  font-size: 11.5px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.pg-contrib-s {
+  font-size: 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 差额那一行：解释"四项之和为什么不等于总量"。
+   左对齐的是可核对的合计，右对齐的是差额与原因，扫读时先看到数再看解释。 */
+.pg-contrib-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin-top: 12px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--line-soft);
+  font-size: 10.5px;
+  color: var(--fg-3);
+}
+.pg-contrib-foot-r { color: var(--fg-4); }
+
+/* 两栏等高。
+   默认 .pg-2col 是 align-items:start，两栏各按自己内容的高度收边：
+   左栏四个条形 168px、右栏四条判定 318px，左栏底下就空出一块 L 形缺口。
+   缺口不是留白，是"这里还有东西没画完"的观感。
+   改等高后左栏的行距自然撑开、差额说明落到卡片底部，
+   两边边线齐平，页面收口就干净了。 */
+.pg-2col.is-fill { align-items: stretch; }
+.pg-2col.is-fill > .pg-card { display: flex; flex-direction: column; }
+.pg-2col.is-fill > .pg-card > div {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pg-2col.is-fill .pg-contrib { flex: 1; justify-content: space-between; }
+
+/* ------------------------------------------------ 预警策划：52 周走势图 */
+/* 【这些类必须真的有样式】
+   WeekTrend 的 SVG 全靠类名上色；类名没写 CSS 时 SVG 元素按默认值渲染——
+   圆是黑的、线是黑的，预警点下面拖出一颗黑色"水滴"，
+   看起来像数据坏了，其实只是样式缺席。 */
+.pg-trend-shell { padding: 4px 14px 2px; }
+.pg-trend-legend {
+  display: flex;
+  gap: 16px;
+  font-size: 10.5px;
+  color: var(--fg-3);
+  margin-bottom: 4px;
+}
+.pg-trend-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.pg-trend-key {
+  width: 14px; height: 0;
+  border-top: 2px solid var(--fg);
+  display: inline-block;
+}
+.pg-trend-key.base { border-top-style: dashed; border-top-color: var(--fg-4); }
+.pg-trend-key.alert {
+  width: 8px; height: 8px;
+  border: 0; border-radius: 50%;
+  background: var(--bad);
+}
+.pg-trend-key.improve {
+  width: 8px; height: 8px;
+  border: 0; border-radius: 50%;
+  background: var(--good);
+}
+.pg-trend-wrap { width: 100%; overflow: hidden; }
+.pg-trend { width: 100%; height: auto; display: block; }
+.pg-trend-grid { stroke: var(--line-soft); stroke-width: 1; }
+.pg-trend-y {
+  font-size: 10px;
+  fill: var(--fg-4);
+  text-anchor: end;
+  font-variant-numeric: tabular-nums;
+}
+.pg-trend-x {
+  font-size: 10px;
+  fill: var(--fg-4);
+  text-anchor: middle;
+}
+/* 基线：虚线、低亮度 —— 它是参照物，不能和实际线抢注意力 */
+.pg-trend-base {
+  fill: none;
+  stroke: var(--fg-4);
+  stroke-width: 1.4;
+  stroke-dasharray: 4 3;
+  opacity: .75;
+}
+.pg-trend-now { fill: none; stroke: var(--fg-2); stroke-width: 2; }
+.pg-trend-cursor { stroke: var(--fg-4); stroke-width: 1; stroke-dasharray: 3 3; }
+/* 悬停跟随线：实线、比选中虚线细半档 —— 两种竖线要能一眼分清 */
+.pg-trend-hoverline { stroke: var(--fg-3); stroke-width: 1; }
+/* 点放大过渡：动态感全靠这一行 —— r 是 SVG 几何属性，
+   Chromium 支持对它做 CSS transition（Edge 同核，本项目只跑在 Edge 里） */
+.pg-week-point { transition: r .16s ease; }
+.pg-week-point.is-hover { r: 4.2; }
+.pg-week-alert .pg-week-point.is-hover { r: 7; }
+/* 命中区：只负责把点击范围扩到 26px，必须透明 ——
+   它曾以 SVG 默认黑色渲染成一颗"水滴"，就是这句缺席的教训 */
+.pg-week-hit { fill: transparent; stroke: none; }
+.pg-week-point { stroke: var(--panel, #151517); stroke-width: 1.4; }
+.pg-week-point.normal { fill: var(--fg-4); }
+.pg-week-point.alert { fill: var(--bad); }
+.pg-week-point.improving { fill: var(--good); }
+.pg-week-alert { cursor: pointer; }
+.pg-week-alert.is-on .pg-week-point { stroke: var(--fg); stroke-width: 2.2; }
+.pg-week-label {
+  font-size: 10px;
+  fill: var(--fg-3);
+  text-anchor: middle;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* ------------------------------------------------ 策划方案（主从看板） */
+/* 左（原因排行）+ 右（当前原因动作），两栏。窄屏收成上下堆叠。 */
+.pg-plan-master {
+  display: grid;
+  grid-template-columns: minmax(240px, 34%) 1fr;
+  gap: 0;
+  align-items: start;
+}
+/* 左栏排行：给一条细分隔线，和右栏动作表区分开 */
+.pg-plan-rank {
+  padding: 12px 14px;
+  border-right: 1px solid var(--line-soft);
+  min-height: 100%;
+}
+.pg-plan-rank-head {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+}
+/* 右栏动作明细 */
+.pg-plan-detail {
+  padding: 12px 14px 14px;
+  min-width: 0;
+}
+.pg-plan-detail-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+@media (max-width: 1180px) {
+  .pg-plan-master { grid-template-columns: 1fr; }
+  .pg-plan-rank { border-right: 0; border-bottom: 1px solid var(--line-soft); }
+}
+/* 旧版"全部摊开"结构（保留以防别处引用，已由主从看板取代） */
+.pg-plan { display: flex; flex-direction: column; }
+.pg-plan-i {
+  padding: 12px 14px 13px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.pg-plan-i:last-child { border-bottom: 0; }
+.pg-plan-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 9px;
+}
+.pg-plan-n { font-size: 12px; color: var(--fg); font-weight: 600; }
+/* 别名说明不要抢主标题的注意力：小一号、低一档灰、不加粗 */
+.pg-plan-alias {
+  font-style: normal;
+  margin-left: 6px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--fg-4);
+}
+.pg-plan-m {
+  font-size: 10.5px;
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 选中的预警周：用左侧竖条 + 底色，不用描边 ——
+   描边会和表格自身的行分隔线打架，看起来像"这一行没画完"。 */
+.pg-table tbody tr.clickable.is-on td { background: var(--accent-dim); }
+.pg-table tbody tr.clickable.is-on td:first-child {
+  box-shadow: inset 2px 0 0 0 var(--fg);
+}
+
+/* 窄屏：贡献行让"明细"换到下一行，避免把条形压成一条缝 */
+@media (max-width: 900px) {
+  .pg-contrib-r { grid-template-columns: 46px 1fr 70px; }
+  .pg-contrib-s { grid-column: 2 / -1; }
+}
+
+/* ================================================ 竞品雷达：三块 BI 看板 */
+
+/* ---- ① 负评率点级图：点 + 本店基准虚线 ---- */
+.pg-cdot-wrap { padding: 12px 14px 8px; }
+.pg-cdot { display: flex; flex-direction: column; gap: 2px; }
+.pg-cdot-r {
+  display: grid;
+  grid-template-columns: 92px 1fr 64px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 4px;
+  border-radius: 5px;
+  transition: background var(--t-fast) var(--ease);
+}
+.pg-cdot-r.is-us { background: rgba(255,255,255,.035); }
+.pg-cdot-r.clickable { cursor: pointer; }
+.pg-cdot-r.clickable:hover { background: rgba(255,255,255,.05); }
+.pg-cdot-r.is-on { background: rgba(255,255,255,.075); }
+.pg-cdot-l { font-size: 11.5px; color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-cdot-r.is-us .pg-cdot-l { color: var(--accent); font-weight: 600; }
+.pg-cdot-r.is-on .pg-cdot-l { color: var(--fg); }
+.pg-cdot-t { position: relative; height: 16px; min-width: 0; }
+/* 基准虚线：每个轨道里画一段，视觉上连成一条 */
+.pg-cdot-base {
+  position: absolute; top: -2px; bottom: -2px; width: 0;
+  border-left: 1px dashed var(--accent-line);
+}
+.pg-cdot-d {
+  position: absolute; top: 50%; width: 9px; height: 9px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--bg-sub);
+  border: 1.5px solid var(--fg-4);
+  transition: transform var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.pg-cdot-d.is-sig { background: var(--bad); border-color: var(--bad); }
+.pg-cdot-r.is-us .pg-cdot-d {
+  background: var(--accent); border-color: var(--accent);
+  width: 11px; height: 11px;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.08);
+}
+.pg-cdot-r.clickable:hover .pg-cdot-d { transform: translate(-50%, -50%) scale(1.35); }
+.pg-cdot-r.is-on .pg-cdot-d { transform: translate(-50%, -50%) scale(1.35); box-shadow: 0 0 0 3px rgba(255,255,255,.14); }
+.pg-cdot-v { text-align: right; font-size: 11px; color: var(--fg-2); }
+.pg-cdot-r.is-us .pg-cdot-v { color: var(--accent); font-weight: 600; }
+/* x 轴：只标 0 和基准位（读位置用，不是坐标尺） */
+.pg-cdot-x { position: relative; height: 16px; margin-left: 102px; margin-right: 74px; }
+.pg-cdot-x > span {
+  position: absolute; top: 2px; font-size: 9px; color: var(--fg-4);
+  transform: translateX(-50%);
+}
+.pg-cdot-x > span:first-child { transform: none; }
+.pg-cdot-lg { display: flex; gap: 14px; margin-top: 6px; padding: 0 4px; }
+.pg-cdot-lg .bi-lg-item i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+.pg-cdot-lg .is-sig-i { background: var(--bad); }
+.pg-cdot-lg .is-ns-i { background: var(--bg-sub); border: 1.5px solid var(--fg-4); }
+.pg-cdot-lg .is-us-i { width: 0; height: 10px; border-radius: 0; border-left: 1px dashed var(--accent-line); }
+
+/* 选中行联动到表格 */
+.pg-table tr.is-sel td { background: rgba(255,255,255,.06); }
+.pg-table tr.is-sel td:first-child { box-shadow: inset 2px 0 0 var(--accent); }
+
+/* ---- ② 维度分布条：范围线 + 5 点，本店实心圈 ---- */
+.pg-dstrip {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 12px 14px;
+  border-radius: 6px;
+}
+.pg-dstrip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pg-dstrip-r {
+  display: grid;
+  grid-template-columns: 76px 1fr 52px 150px;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 2px;
+}
+.pg-dstrip-l { font-size: 11.5px; color: var(--fg-2); }
+.pg-dstrip-t { position: relative; height: 18px; min-width: 0; }
+.pg-dstrip-range {
+  position: absolute; top: 50%; height: 4px; transform: translateY(-50%);
+  border-radius: 2px;
+  background: rgba(255,255,255,.10);
+}
+.pg-dstrip-d {
+  position: absolute; top: 50%; width: 9px; height: 9px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--bg-sub);
+  border: 1.5px solid var(--fg-3);
+  cursor: pointer;
+  transition: transform var(--t-fast) var(--ease), opacity var(--t-fast) var(--ease),
+    box-shadow var(--t-fast) var(--ease);
+}
+.pg-dstrip-d.is-worst { border-color: var(--bad); }
+.pg-dstrip-d.is-us {
+  background: var(--accent); border-color: var(--accent);
+  width: 11px; height: 11px;
+  box-shadow: 0 0 0 3px rgba(255,255,255,.08);
+  cursor: default;
+}
+.pg-dstrip-d:hover { transform: translate(-50%, -50%) scale(1.4); z-index: 1; }
+.pg-dstrip-d.is-cur { box-shadow: 0 0 0 2px var(--accent-line); }
+.pg-dstrip-d.is-on { transform: translate(-50%, -50%) scale(1.4); box-shadow: 0 0 0 3px rgba(255,255,255,.16); z-index: 1; }
+.pg-dstrip-d.is-dim { opacity: .3; }
+.pg-dstrip-s { text-align: right; font-size: 11px; color: var(--warn, var(--fg-2)); }
+.pg-dstrip-s small { font-size: 9px; color: var(--fg-4); margin-left: 1px; }
+.pg-dstrip-wb { font-size: 10.5px; text-align: right; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pg-dstrip-wb b { font-weight: 500; }
+
+/* ---- ③ 用词蝴蝶图：左右镜像，条长 = |log₂比| ---- */
+.pg-bfly-wrap { position: relative; }
+.pg-bfly-h {
+  display: grid; grid-template-columns: 1fr auto 1fr;
+  gap: 10px; align-items: center;
+  font-size: 10px; margin-bottom: 8px;
+}
+.pg-bfly-h > span:first-child { text-align: right; }
+.pg-bfly-h > span:last-child { text-align: left; }
+.pg-bfly {
+  display: grid;
+  grid-template-columns: 1fr 1px 1fr;
+  gap: 0 12px;
+}
+.pg-bfly-axis { background: var(--line-soft); }
+.pg-bfly-side { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pg-bfly-row {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  padding: 2px 0;
+  border-radius: 4px;
+  transition: background var(--t-fast) var(--ease);
+}
+.pg-bfly-row:hover { background: rgba(255,255,255,.045); }
+/* 本店侧：词在外侧，条从中心轴向左长（row: 词 | 条 | n） */
+.pg-bfly-side.ours .pg-bfly-row { grid-template-columns: minmax(48px, 88px) 1fr 44px; }
+.pg-bfly-side.ours .pg-bfly-bar { display: flex; flex-direction: row-reverse; }
+.pg-bfly-side.ours .pg-bfly-w { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-bfly-side.ours .pg-bfly-n { text-align: left; }
+/* 对标侧：镜像 */
+.pg-bfly-side.theirs .pg-bfly-row { grid-template-columns: 44px 1fr minmax(48px, 88px); }
+.pg-bfly-side.theirs .pg-bfly-w { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pg-bfly-side.theirs .pg-bfly-n { text-align: right; }
+.pg-bfly-bar { min-width: 0; height: 13px; display: flex; }
+.pg-bfly-bar i {
+  height: 100%; border-radius: var(--r-bar, 2px);
+  transition: filter var(--t-fast) var(--ease), width .35s var(--ease);
+}
+.pg-bfly-side.ours .pg-bfly-bar i {
+  background: linear-gradient(90deg, rgba(255,255,255,.14), var(--accent));
+}
+.pg-bfly-side.theirs .pg-bfly-bar i {
+  background: linear-gradient(90deg, var(--info), rgba(255,255,255,.14));
+}
+.pg-bfly-row:hover .pg-bfly-bar i { filter: brightness(1.25); }
+.pg-bfly-n { font-size: 10px; color: var(--fg-4); }
+
+/* 窄屏：蝴蝶图两侧改为上下堆叠（中间轴失去意义就隐藏） */
+@media (max-width: 560px) {
+  .pg-bfly { grid-template-columns: 1fr; }
+  .pg-bfly-axis { display: none; }
+  .pg-bfly-side.theirs { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line-soft); }
+  /* 分布条：最差→最好 换行铺满，不再和轴挤一行 */
+  .pg-dstrip-r { grid-template-columns: 64px 1fr 44px; }
+  .pg-dstrip-wb { grid-column: 1 / -1; text-align: left; padding-left: 2px; }
+  .pg-cdot-r { grid-template-columns: 76px 1fr 56px; }
+  .pg-cdot-x { margin-left: 86px; margin-right: 66px; }
+}
+.pg-dstrip-d:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ================================================ 弹幕层（无痕开关） */
+
+.dm-wrap {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  height: 34px;
+  margin-bottom: 6px;
+}
+/* 弹幕打开时横幅长高，给 4 条轨道竖直排开的空间（无痕：关闭即归位） */
+.dm-wrap.has-layer { height: 118px; }
+
+/* 开关：小胶囊，关闭态低调、打开态点亮 */
+.dm-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg-4);
+  font-size: 10.5px;
+  font-family: inherit;
+  padding: 3px 10px 3px 7px;
+  cursor: pointer;
+  transition: color var(--t-fast) var(--ease), border-color var(--t-fast) var(--ease);
+}
+.dm-toggle:hover { color: var(--fg-2); border-color: var(--line-hard); }
+.dm-toggle .dm-toggle-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--fg-5);
+  transition: background var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+}
+.dm-toggle.on { color: var(--accent); border-color: var(--accent-line); }
+.dm-toggle.on .dm-toggle-dot {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+.dm-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 弹幕轨道：绝对定位覆盖在开关左侧的横幅里，不占文档流 */
+.dm-layer {
+  position: absolute;
+  inset: 0 64px 0 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.dm-item {
+  position: absolute;
+  left: 100%;
+  top: 4px;
+  max-width: 75%;
+  white-space: nowrap;
+  font-size: 11.5px;
+  line-height: 24px;
+  animation-name: dm-scroll;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  will-change: transform;
+  opacity: .62;
+}
+/* 纵深分层：近轨大而清晰，远轨小而淡 —— 弹幕有前后之分 */
+.dm-l0 { font-size: 12.5px; opacity: .78; }
+.dm-l1 { font-size: 11.5px; opacity: .62; }
+.dm-l2 { font-size: 10.5px; opacity: .48; }
+.dm-l3 { font-size: 10px;   opacity: .36; }
+/* 情感着色：低饱和，只做氛围，不承载数据主张 */
+.dm-item.pol-正向 { color: var(--good-fg); }
+.dm-item.pol-负向 { color: var(--bad-fg); }
+.dm-item.pol-中性 { color: var(--fg-4); }
+
+/* 【位移必须与元素自身宽度无关】-100% 会让长弹幕跑得更快，
+   同轨必追尾（v2 叠字的第二根源）。固定位移 → 同轨速度恒定，
+   出发间距的排队计算才成立。 */
+@keyframes dm-scroll {
+  from { transform: translateX(0); }
+  to   { transform: translateX(calc(-100vw - 800px)); }
+}
+
+/* 减弱动效：静止显示，降级为一条淡色文字带（仍 aria-hidden） */
+.dm-layer.is-static { pointer-events: none; }
+.dm-layer.is-static .dm-item {
+  position: relative;
+  left: 0;
+  animation: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
