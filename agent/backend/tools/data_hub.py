@@ -100,8 +100,23 @@ class DataHub:
         self.latest_week = int(max(self.weeks))
 
     # ---------- 元信息 ----------
-    def overview(self) -> ToolResult:
+    def overview(self, category: str | None = None) -> ToolResult:
+        """经营底盘。category 给定时只统计该类目。
+
+        【为什么要支持按类目切，而不是让页面自己算】
+        总览页做成了可联动看板：点一个类目，上面四个 KPI 跟着变。
+        如果页面那边自己拿 _cat_week 求和算一遍，"退货率"这个数的口径
+        就有两份实现了 —— 一份在这里（Agent 答「大盘怎么样」用），
+        一份在 pages.py。两份迟早分叉，而且分叉后页面和问答会给出
+        不同的数，两边都不报错。
+
+        所以口径只留这一份：同一个函数、同一组公式，输入换成切片后的表。
+        不传 category 时行为与之前**逐字节相同**（p / r 就是原表）。
+        """
         p, r = self.panel, self.returns
+        if category:
+            p = p[p['biz_category'] == category]
+            r = r[r['biz_category'] == category]
         total_orders = int(p['orders'].sum())
         total_gmv = float(p['gmv'].sum())
         total_gp = float(p['gross_profit'].sum())
@@ -109,8 +124,9 @@ class DataHub:
         return ToolResult(
             ok=True,
             data={
-                'skus': int(self.sku.shape[0]),
-                'categories': self.categories,
+                'skus': int(self.sku[self.sku['biz_category'] == category].shape[0])
+                if category else int(self.sku.shape[0]),
+                'categories': [category] if category else self.categories,
                 'weeks': len(self.weeks),
                 'orders_year': total_orders,
                 'gmv_year': round(total_gmv, 2),
@@ -126,6 +142,7 @@ class DataHub:
                 'scanned': {'panel_weekly': len(p), 'returns': len(r),
                             'sku_master': len(self.sku)},
                 'formula': '退货率 = returns 行数 / sum(orders)；损失 = sum(loss_amount)',
+                'scope': category or '全店',
             },
         )
 

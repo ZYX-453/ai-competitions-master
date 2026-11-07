@@ -93,7 +93,20 @@ class CDP:
 
 
 def capture(name: str, question: str) -> Path | None:
-    url = BASE + "?" + urllib.parse.urlencode({"q": question, "pace": "0"})
+    # 【URL 必须带 #/chat，否则截到的是总览页】
+    # ChatPage 只在 page==='chat' 时渲染，而 page 由 hash 决定，
+    # 默认是 'dashboard'。原来这里只拼了 ?q=...，于是：
+    #   页面加载 → App 解析 hash（空）→ dashboard → 根本没挂 ChatPage
+    #   → ?q= 那个 useEffect 压根没执行 → 也不会有 answer 事件
+    #   → 等 90s 超时 → 截下来是一张完整的总览页
+    # 危险的地方在于：图看着"是对的"（总览页渲染得很好），只有对着
+    # 用例清单核对才会发现"这不是我问的那一题"。
+    # 这是加 hash 路由（v4.0）时漏改的，此后没重跑过截图脚本，所以一直没暴露。
+    #
+    # parseHash 只读 hash 部分（#/chat），?q= 仍从 window.location.search 读，
+    # 两者互不干扰，所以答案是 search + hash 同时给。
+    url = (BASE + "?" + urllib.parse.urlencode({"q": question, "pace": "0"})
+           + "#/chat")
     proc = subprocess.Popen([
         EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars",
         f"--remote-debugging-port={PORT}",
@@ -116,17 +129,29 @@ def capture(name: str, question: str) -> Path | None:
         # 第三版：看发送按钮是否 disabled
         #   → 也永远等不到。按钮的逻辑是 `busy || !input.trim()`，
         #     提问后输入框被清空，所以它一直是 disabled，跟 busy 无关。
-        # 第四版（当前）：认右栏那个 chip。
+        # 第四版：认右栏那个 chip。
         #   前端只有在收到 done 事件后才渲染「N 步 · X.Xs」这个小标签，
         #   它是整个页面上唯一一个"后端真的说完了"的直接证据。
-        #   判据：.rail-right .chip 存在，且文本里带"步"。
+        # 第五版（当前）：见下面 uncovered 那段的说明。
+        #
+        # 【选择器必须按问答页的类名，不能用工作台的】
+        # v4.0 加了多页面工作台之后，问答页的骨架是
+        #   .chat-shell > .chat-rail / .chat-stage / .chat-rr
+        # 而 .rail-left / .rail-right 是工作台那几个页面的类名。
+        # 原来这里写 .rail-right .chip，在问答页上永远匹配不到 →
+        # chip 恒为空 → doneChip 恒为 False → 每次等满 90s 超时，
+        # 然后在"模型还在生成"的中间态截一张图。
+        # 图本身不报错、甚至挺好看，只有比对文案才会发现
+        # "正在用 qwen-plus 组织结论"还挂在屏幕上。
+        # 现在两个都试，工作台/问答页都能用。
         t0 = time.time()
         ready = False
         state = {}
         while time.time() - t0 < 90:
             state = c.js("""(() => {
               const t = document.body.innerText || '';
-              const chip = document.querySelector('.rail-right .chip');
+              const chip = document.querySelector('.chat-rr .chip')
+                        || document.querySelector('.rail-right .chip');
               const chipTxt = chip ? chip.innerText : '';
               return {
                 len: t.length,
@@ -179,10 +204,15 @@ def capture(name: str, question: str) -> Path | None:
                   f"chip={state.get('chipTxt')!r} pending={state.get('pending')}")
 
         # 量内容高度：取三栏里最高的那一栏
+        # 问答页的类名是 .chat-rail / .chat-rr，工作台是 .rail-left / .rail-right，
+        # 两边都量，取最大值——否则在问答页上量不到滚动区高度，
+        # 只会截到首屏 945px，正文后面全被切掉。
         h = c.js("""(() => {
           const q = s => { const e = document.querySelector(s); return e ? e.scrollHeight : 0; };
           return Math.max(document.documentElement.scrollHeight,
-                          q('.rail-left'), q('.rail-right'), q('main') || 0,
+                          q('.rail-left'), q('.rail-right'),
+                          q('.chat-rail'), q('.chat-rr'), q('.chat-stage'),
+                          q('main') || 0,
                           window.innerHeight);
         })()""") or 1000
         h = int(min(max(h + 40, 900), 6000))

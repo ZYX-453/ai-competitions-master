@@ -27,9 +27,9 @@ import type { NavData } from './lib/pages'
 import { Dashboard } from './pages/Dashboard'
 import { Attribution } from './pages/Attribution'
 import { Reasons } from './pages/Reasons'
+import { Plan } from './pages/Plan'
 import { Reviews } from './pages/Reviews'
 import { Competitors } from './pages/Competitors'
-import { EvalPage } from './pages/EvalPage'
 import { ChatPage } from './pages/ChatPage'
 import { Loading } from './components/PageKit'
 
@@ -47,9 +47,13 @@ interface Health {
   tools: string[]
 }
 
-type PageKey = 'dashboard' | 'attribution' | 'reasons' | 'reviews' | 'competitors' | 'eval' | 'chat'
+type PageKey = 'dashboard' | 'attribution' | 'reasons' | 'plan' | 'reviews' | 'competitors' | 'chat'
 
-const VALID: PageKey[] = ['dashboard', 'attribution', 'reasons', 'reviews', 'competitors', 'eval', 'chat']
+/* 【自检页已移出导航】
+   它讲的是"我们验了什么"，属于给评审看的质保材料，不是业务用户要看的东西。
+   把 'eval' 从这个白名单里删掉，顺带解决一个隐患：原来 #/eval 仍是合法路由，
+   任何人猜到哈希就能打开；现在会落到 parseHash 的兜底（dashboard）。 */
+const VALID: PageKey[] = ['dashboard', 'attribution', 'reasons', 'plan', 'reviews', 'competitors', 'chat']
 
 /** 解析 hash：#/attribution/44 → { page: 'attribution', arg: '44' } */
 function parseHash(): { page: PageKey; arg: string } {
@@ -202,12 +206,31 @@ export default function App() {
         </header>
 
         <div className={`app-scroll${isChat ? ' no-pad' : ''}`}>
-          {page === 'dashboard' && <Dashboard onOpenWeek={openWeek} />}
+          {page === 'dashboard' && (
+            <Dashboard
+              onOpenWeek={openWeek}
+              // 【从总览点原因 → 带着当前范围进原因治理页】
+              // 联动不该只在总览页内部生效：读者看到"服饰的破损占 21%"，
+              // 下一步一定是想看"那服饰的破损该怎么治"。
+              // 只跳页不带范围，等于让他再选一遍。
+              onOpenCategory={(c) => {
+                setCategory(c)
+                go('reasons')
+              }}
+            />
+          )}
           {page === 'attribution' && (
             <Attribution week={week} setWeek={(w) => { setWeek(w); go('attribution', w) }} />
           )}
           {page === 'reasons' && (
             <Reasons
+              categories={nav.categories}
+              category={category}
+              setCategory={setCategory}
+            />
+          )}
+          {page === 'plan' && (
+            <Plan
               categories={nav.categories}
               category={category}
               setCategory={setCategory}
@@ -223,7 +246,6 @@ export default function App() {
               setCategory={setCategory}
             />
           )}
-          {page === 'eval' && <EvalPage />}
           {page === 'chat' && <ChatPage health={health} nav={nav} />}
         </div>
       </main>
@@ -260,6 +282,9 @@ function NavIcon({ name }: { name: string }) {
     message: 'M4 5h16v11H8l-4 4V5z',
     target: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zm0 4.5a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9z',
     check: 'M4 12.5l5 5L20 6.5',
+    // 预警：三角感叹号。用方向性最强的一个符号，不要用铃铛
+    // （铃铛在仪表盘里常见，容易被读成"通知"而不是"这周要解释"）
+    alert: 'M12 4l9 16H3L12 4zM12 10v4M12 17.2v.4',
     spark: 'M12 3l2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3z',
   }
   return (

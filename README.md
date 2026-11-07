@@ -10,17 +10,31 @@
 
 ## 三分钟跑起来
 
+**先装依赖**（只需一次，Python 3.10+）：
+
+```bash
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt      # Windows
+# .venv/bin/pip install -r requirements.txt        # macOS / Linux
+```
+
+然后启动。**注意 `set` 和 `export` 不能混用**——在 Git Bash 里 `set CANYU_LLM_KEY=xxx`
+不会设置环境变量（Bash 的 `set` 是设 shell 选项），服务会静默退回模板模式，端口正常、不报错。
+
 ```bash
 cd agent/backend
 
-# Windows (cmd)
+# Windows (cmd / PowerShell)
 set CANYU_LLM_KEY=你的key
-"C:\Program Files\Python311\python.exe" -m uvicorn main:app --port 8848
+python -m uvicorn main:app --port 8848
 
-# macOS / Linux
+# macOS / Linux / Git Bash
 export CANYU_LLM_KEY=你的key
 python -m uvicorn main:app --port 8848
 ```
+
+自带一键脚本（会自动找 `.venv`、检查前端产物）：
+`agent/start.bat`（Windows 双击）、`agent/start.sh`（Git Bash / macOS / Linux）。
 
 打开 <http://127.0.0.1:8848> 就是完整应用（前端产物已在仓库里，不用装 node）。
 
@@ -53,10 +67,10 @@ Key 用阿里云百炼的（`sk-ws-` 开头）。换厂商设 `CANYU_LLM_BASE` +
 
 | 页面 | 回答什么 |
 |---|---|
-| 总览 | 现在怎么样、哪里最疼（52 周曲线 + 判为异常的周 + 类目/原因排行） |
+| 总览 | 现在怎么样、哪里最疼（**可联动 BI 看板**：52 周曲线 + 类目×周热力图 + 类目/原因排行 + 异常周，点类目整页跟着切） |
 | 归因 | 这一周为什么涨了（双门槛判定 → 贡献度分解 → 构成对比 → 配对检验） |
 | 原因治理 | 9 个原因各自**值不值得管**（按损失排，不按条数排） |
-| 评论洞察 | 情感结构 · 抱怨点 · 用户画像 · 分周走势 |
+| 评论洞察 | 情感结构 · 抱怨点（**条形可切口径/条数，原话悬停即见，点开展开全部**）· 用户画像 · 分周走势 |
 | 竞品雷达 | 我们在同类里处在什么位置（含显著性检验与数据性质） |
 | 自检 | 验了什么、在多大的数据上验的 |
 | 问答 | 按需深入，让 Agent 自己决定查什么 |
@@ -126,8 +140,15 @@ Key 用阿里云百炼的（`sk-ws-` 开头）。换厂商设 `CANYU_LLM_BASE` +
 你永远无法证明「发现了促销机制」这个结论是对的。详细的 DGP 设计和
 参数回收检验见 [reports/README.md](reports/README.md)。
 
-> ⚠️ 仓库里的 `data/processed/*.csv` 被 `.gitignore` 排除（最大的 9.9MB）。
-> 需要数据请跑 `python scripts/build_dataset.py`（种子固定，产出完全一致）。
+> **`data/processed/` 是进仓库的（16MB）**，因为后端启动就要加载它——
+> 判断标准不是"是不是生成物"，而是"clone 下来能不能立刻跑"。
+> 只有 `data/raw/`（13MB 公开语料，仅"从零重新生成"时才用）被排除在外。
+> 想完整复现数据集：把原始语料放回 `data/raw/`，再跑
+> `python scripts/build_dataset.py`（种子固定，数值完全一致）。
+>
+> ⚠️ **跨平台注意**：Windows 上 pandas 的 `to_csv` 默认写 CRLF，而仓库里是 LF。
+> 重跑任何 build 脚本后 `git status` 会显示整文件全变更——那是换行符，不是数据变了。
+> 转回 LF 后 md5 与仓库版本一致（已验证 `corpus.csv` → `d5ad68eb…`）。
 
 ### 关于"自动爬取评论"
 
@@ -170,16 +191,27 @@ python -m tools.collectors --scan
 `corpus.csv` 里物理上没有 `label` 列——不是靠约定说"别用"，是它根本不在。
 所以"准确率 95%"是真的判出来的，不是和标准答案对了一遍。
 
-**仓库里有两个带真值的文件，它们不是分析输入，请注意区分**：
+**有两个带真值的文件，它们不是分析输入，请注意区分**：
 
-| 文件 | 为什么在里面 | 谁能读它 |
+| 文件 | 在不在仓库 | 谁能读它 |
 |---|---|---|
-| `data/processed/reviews_competitor.csv` | 竞品语料的**构建素材**，`scripts/build_review_corpus.py` 读它拆成公开列 + 真值列 | 只有构建脚本 |
-| `data/review_pool/_corpus_truth.csv` | 上面那步拆出来的真值，`check_*.py` 算准确率时用 | 只有验收脚本（已在 `.gitignore`） |
+| `data/processed/reviews_competitor.csv` | ✅ 在（构建素材） | 只有构建脚本——`build_review_corpus.py` 读它拆成公开列 + 真值列 |
+| `data/review_pool/_corpus_truth.csv` | ❌ 不在（`.gitignore` 挡住） | 只有验收脚本——`check_*.py` 算准确率时用 |
 
 运行时链路（`main.py` → `pages.py` → `tools/review_tools.corpus()`）**只读 `corpus.csv`**，
 且 `corpus()` 读进来第一件事就是把 `label`/`cause_l1`/`cause_l2` 删掉——
 即使将来有人往 corpus 里补了真值，下游也看不见。
+
+> ⚠️ **`_corpus_truth.csv` 不在仓库里**（这正是它该有的样子：真值不该跟着代码走）。
+> 但 `check_review_analytics.py` 要读它算准确率，所以**新克隆的环境第一次跑验收会直接抛
+> `FileNotFoundError`**。先补一次：
+>
+> ```bash
+> python scripts/build_review_corpus.py   # 生成 corpus.csv + _corpus_truth.csv
+> ```
+>
+> 跑完记得把 `corpus.csv` 的换行符转回 LF（Windows 上 `to_csv` 默认 CRLF），
+> 否则 git 会把整个文件当成全变更。数据本身是一致的，已验证。
 
 | 能力 | 问法示例 | 关键设计 |
 |---|---|---|

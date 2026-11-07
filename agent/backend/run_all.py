@@ -65,7 +65,12 @@ def main():
             continue
         ev, cost = cc.stream_chat(q)
         ans = next((d for n, d in ev if n == 'answer'), None)
-        facts = (ans or {}).get('facts') or {}
+        # 【取证对象取错了地方】answer 顶层没有 facts 字段（只有
+        # headline/badge/summary/blocks/caveats/week/llm_note/by_llm），
+        # 真正的数字在 tool_result 的 data/evidence 里。
+        # 组装逻辑统一在 check_chat.facts_from —— 这里原来自己也有一份，
+        # 命令行入口那份没跟着改，于是"修好了"只修好了一半。
+        facts = cc.facts_from(ev)
         if not ans:
             rows.append((cid, 'NO-ANSWER', '-', '-', f'{cost:.1f}s'))
             continue
@@ -78,7 +83,11 @@ def main():
         # 徽章不匹配也是硬性失败：徽章是后端判定结论，写错了等于结论错了。
         if badge != want_badge:
             problems = problems + [f'徽章 {badge} ≠ 期望 {want_badge}']
-        by_llm = ans.get('by_llm')
+        # 【字段可能是"不存在"而不是 False】
+        # 模板兜底的 answer 里根本不写 by_llm 这个键（实测 E4 有一次如此），
+        # ans.get('by_llm') 拿到 None，靠 `not None` 恰好判成"模板兜底"——
+        # 结论对，但属于运气。显式给默认值，"缺字段"和"明确 False"走同一条路。
+        by_llm = bool(ans.get('by_llm', False))
         status = 'PASS' if not problems else 'FAIL'
         # 【失败时必须点名原因，不能只说"兜底了"】
         # 之前 E5 偶发 FAIL，摘要只显示"by_llm=False，是模板兜底"，

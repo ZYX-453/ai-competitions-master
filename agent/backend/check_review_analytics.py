@@ -217,8 +217,20 @@ def run_wordcloud(corpus) -> None:
           f"Top10={top10}" if not hit else f'混入虚词 {hit}')
 
     cov = r['topk_coverage']
-    check('Top40 覆盖率在 25%-85% 之间', 0.25 <= cov <= 0.85,
-          f'{cov*100:.1f}%（过低=词汇太散，过高=文本太模板化）',
+    # 【阈值是拍的，2026-11-02 实测后保留，但把口径写清楚】
+    # 用 word_freq 直接算本语料 15 个切片的 Top40 覆盖率：
+    #   全量 19.6% · 服饰 39.9% · 数码 19.9% · 生鲜 28.5% · 个护 30.0%
+    #   负向 6.5% · 正向 3.6%
+    # 结论：覆盖率高低取决于**切片有多杂**，不是代码质量。
+    # "全部"混合 4 个类目，用词天然比单个类目分散；
+    # 负向切片只有 2,270 条却有 3,895 个词种，平均每词出现 0.58 次，
+    # 所以只覆盖 6.5% —— 这恰好印证了"抱怨是零散的"这个产品结论。
+    # 因此这条只提示、不判失败。真正该守的兜底在 review_tools.review_wordcloud()：
+    # cov < 0.25 时会自动挂 coverage_note 向用户解释，那句说明在不在才是要守的。
+    check('Top40 覆盖率（提示项：由切片多样性决定，不是缺陷）',
+          0.25 <= cov <= 0.85,
+          f'{cov*100:.1f}%'
+          f'（全量 19.6% / 服饰 39.9% / 负向 6.5%，均属该语料的正常范围）',
           warn_only=True)
 
     # 【上面那条"无虚词"其实测得太浅了】
@@ -506,6 +518,125 @@ def run_contract() -> None:
           '无 numpy 类型泄漏' if ok_ser else err)
 
 
+def run_dashboard() -> None:
+    """【8】总览看板的联动契约。
+
+    【这一节是补课的产物，起因是一个真 bug】
+    总览页做成可联动看板后，选中一个类目，其他类目的退货率全变成了 0.00%。
+    根因：by_category 那个循环用的是**已按类目过滤过**的表，
+    于是选中服饰时，个护/数码/生鲜 在过滤后的表里查不到行，
+    orders=0 → 退货率算成 0。
+
+    这类错的特点和第七节一模一样：**不报错、不崩、断言全绿**，
+    只是页面上开始显示 0.00%。而且"0%"看起来像"这个类目没退货"，
+    比显示"—"更危险 —— 读者会信。
+    """
+    print('\n【8】总览看板：联动不能改坏其他类目的数')
+    try:
+        import pages
+    except Exception as e:                      # noqa: BLE001
+        check('pages 可导入', False, str(e))
+        return
+
+    base = pages.dashboard(None)
+    cats = [c['category'] for c in base['by_category']]
+    check('by_category 覆盖全部类目', len(cats) == len(getattr(
+        pages.get_hub(), 'categories', [])), f'{cats}')
+
+    # 全量基线：每个类目的订单数 / 退货率
+    ref = {c['category']: (c['orders'], c['return_rate'])
+           for c in base['by_category']}
+
+    # 【核心断言】选中任一类目后，其他类目的数必须**逐字节不变**
+    bad = []
+    for sel in cats:
+        d = pages.dashboard(sel)
+        if d['scope'] != sel:
+            bad.append(f'{sel}: scope={d["scope"]}')
+        for c in d['by_category']:
+            o, r = ref.get(c['category'], (None, None))
+            if c['orders'] != o or abs(c['return_rate'] - r) > 1e-9:
+                bad.append(f'选{sel}时{c["category"]}={c["return_rate"]}%(应{r}%)')
+    check('切换范围时 by_category 不被动过', not bad,
+          '四类目数值始终与全店一致' if not bad else '；'.join(bad[:4]))
+
+    # 选中类目后，KPI 必须真的变了（否则"联动"是假的）
+    sel = cats[0]
+    d = pages.dashboard(sel)
+    changed = (d['kpi']['orders_year'] != base['kpi']['orders_year']
+               and d['kpi']['orders_year'] > 0)
+    check('KPI 随范围变化', changed,
+          f"{sel}: {d['kpi']['orders_year']:,} 单 vs 全店 {base['kpi']['orders_year']:,}")
+
+    # 原因结构也必须范围内重算，且占比合计接近 100%
+    share_sum = sum(c['share'] for c in d['causes'])
+    check('范围内原因占比合计 ≈100%', 97 <= share_sum <= 100.5,
+          f'{share_sum:.2f}%（{len(d["causes"])} 个原因）')
+
+    # 热力矩阵：4 类目 × 52 周，一格不少，且带 z
+    hm = base['heatmap']
+    cells = sum(len(r['cells']) for r in hm['rows'])
+    check('热力矩阵完整', len(hm['rows']) == len(cats) and cells == len(cats) * 52,
+          f'{len(hm["rows"])} 行 × {cells // max(len(hm["rows"]),1)} 列 = {cells} 格')
+    noz = [f"{r['category']}W{c['week']}"
+           for r in hm['rows'] for c in r['cells'] if c.get('z') is None]
+    check('每个热力格都有 z（上色键）', not noz,
+          '全部有 z' if not noz else f'{len(noz)} 格缺 z，如 {noz[:3]}')
+
+    # 色阶参数必须由后端给，前端不许拍
+    check('色阶阈值由后端下发', hm.get('scale_z', 0) > 0 and hm.get('sig_z', 0) > 0,
+          f"scale_z={hm.get('scale_z')} / sig_z={hm.get('sig_z')}")
+
+    # 类目 × 原因 交叉矩阵：每个类目都该有格子
+    cm = base['cause_matrix']
+    cells_cat = {c['category'] for c in cm['cells']}
+    check('原因矩阵覆盖全部类目', cells_cat == set(cats),
+          f'{sorted(cells_cat)}')
+
+    # 未知类目必须退回全店，不能出空页面
+    weird = pages.dashboard('不存在的类目')
+    check('未知类目回落全店', weird['scope'] == '全店'
+          and weird['kpi']['orders_year'] == base['kpi']['orders_year'],
+          f"scope={weird['scope']}")
+
+    # ---- 词云块改成 BI 条形后的契约 ----
+    # 【为什么要测这个】
+    # 词云块从"每词挂一句原话的列表"改成"条形 + 悬停浮层 + 折叠原话"，
+    # 前端要同时读 count 和 lift 两个量纲。这两个数一旦有一个没下发，
+    # 页面上会出现"—"或 0 长的条，而不是报错。
+    print('\n【9】评论页词云块：两个量纲都要有，且能排序')
+    from tools import review_tools as _rt
+    _neg = _rt.review_wordcloud(polarity='负向', top_k=40).to_dict().get('data') or {}
+    _all = _rt.review_wordcloud(top_k=40).to_dict().get('data') or {}
+    neg = _neg.get('items') or []
+    allw = _all.get('items') or []
+    check('词云两栏都有数据', bool(neg) and bool(allw),
+          f"差评 {len(neg)} 个 / 全部 {len(allw)} 个")
+
+    # lift 是"按区分度"那一栏的唯一排序依据，缺了整栏就退化回频次
+    sample = neg[:8] or allw[:8]
+    no_lift = [w.get('word') for w in sample if w.get('lift') is None]
+    check('按区分度那栏每个词带 lift', not no_lift,
+          '全部带 lift' if not no_lift else f'{len(no_lift)} 个缺 lift：{no_lift[:3]}')
+
+    # 全部词也必须带 count（条形主值用）
+    no_cnt = [w.get('word') for w in allw[:8] if not w.get('count')]
+    check('全部词栏每个词带次数', not no_cnt,
+          '全部带 count' if not no_cnt else f'{len(no_cnt)} 个缺 count')
+
+    # 每个词必须能回溯到原话（"可回溯"是这个模块对外的承诺）
+    no_q = [w.get('word') for w in (neg[:8] or allw[:8])
+            if not (w.get('quotes') or w.get('samples'))]
+    check('每个词都能回溯到原话', not no_q,
+          '全部有原话' if not no_q else f'{len(no_q)} 个缺原话：{no_q[:3]}')
+
+    # 前端按 2^lift 画条，数组必须已按 lift 降序 —— 前端不重排
+    lifts = [w.get('lift') for w in neg[:10] if w.get('lift') is not None]
+    mono = all(lifts[i] >= lifts[i + 1] for i in range(len(lifts) - 1))
+    check('差评词按 lift 降序下发', mono,
+          f"{'单调' if mono else '乱序'}：{[round(x, 2) for x in lifts[:5]]}")
+
+
 def main() -> int:
     print('=' * 74)
     print('评论分析四模块验收')
@@ -531,6 +662,7 @@ def main() -> int:
     run_persona(corpus)
     run_competitor(corpus)
     run_contract()
+    run_dashboard()
 
     print('\n' + '=' * 74)
     total = len(PASS) + len(FAIL)

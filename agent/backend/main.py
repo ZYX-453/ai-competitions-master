@@ -349,10 +349,14 @@ async def eval_run():
 # diagnose_week，而不是自己再写一个阈值。
 
 @app.get('/api/pages/dashboard')
-def page_dashboard():
-    """总览：KPI + 52 周曲线 + 类目横向对比 + 原因结构 + 异常周。"""
+def page_dashboard(category: str | None = None):
+    """总览：KPI + 52 周曲线 + 类目热力 + 原因结构 + 异常周。
+
+    category 给定时整页按该类目重算（KPI / 曲线 / 原因 / 异常周全变），
+    by_category 与两张矩阵始终返回全量，供前端做联动切换。
+    """
     from pages import dashboard
-    return dashboard()
+    return dashboard(category=category)
 
 
 @app.get('/api/pages/attribution')
@@ -398,6 +402,18 @@ def page_reviews(entity: str = '本店'):
     return review_overview(entity)
 
 
+@app.get('/api/pages/plan')
+def page_plan(category: str | None = None, week: int | None = None):
+    """预警 · 策划：哪几周需要解释 + 这一周该派哪些活（含责任方与验收指标）。"""
+    from pages import plan
+    hub = get_hub()
+    if category and category not in hub.categories:
+        # 与 /api/pages/reasons 同一条规矩：未知类目必须报错，
+        # 静默兜底会渲染出"标题写着错类目、数字其实是全店"的页面。
+        raise HTTPException(400, f'未知类目：{category}')
+    return plan(category, week)
+
+
 @app.get('/api/pages/competitors')
 def page_competitors(category: str | None = None):
     """竞品雷达：负评率对比 + 维度差距 + 用词差异 + 数据性质。"""
@@ -423,6 +439,50 @@ def page_eval():
     return eval_summary()
 
 
+@app.get('/api/pages/danmaku')
+def page_danmaku(category: str | None = None):
+    """弹幕语料：从评论池随机抽一批，逐条带情感方向。
+
+    【为什么单独一个接口，而不是前端从 dashboard 里抠】
+    弹幕是氛围装饰，不是分析结论。它要的是"随机、够多、换着来"，
+    和总览页固定口径的 KPI/曲线完全不同。混进 dashboard 会让那个
+    接口每次刷新返回的弹幕也变（破坏前端缓存复用），还污染它的语义。
+
+    【情感判定复用 review_analytics.score_frame】
+    和评论洞察页同一套词典法，不做第二次实现，避免两处口径漂移。
+    """
+    import random
+    from tools import review_tools as rt
+    from tools import review_analytics as ra
+
+    d = rt.corpus()
+    if category:
+        hub = get_hub()
+        if category not in hub.categories:
+            raise HTTPException(400, f'未知类目：{category}')
+        d = d[d['biz_category'] == category]
+    # 只要有点内容的评论；太短的（纯好评两个字）弹幕没信息量
+    d = d[d['review_len'] >= 6]
+    if d.empty:
+        return {'items': [], 'total': 0}
+
+    # 抽 36 条，够 3~4 条轨道滚动一阵；不足就全取
+    n = min(36, len(d))
+    sample = d.sample(n, random_state=random.SystemRandom().randrange(1 << 30))
+    scored = ra.score_frame(sample)
+    items = []
+    for _, r in sample.reset_index(drop=True).iterrows():
+        pol = scored.loc[scored['review_id'] == str(r['review_id']), 'polarity']
+        polarity = pol.iloc[0] if len(pol) else '中性'
+        text = str(r['review']).strip()
+        # 过长评论截断，弹幕一行不宜超过 ~40 字
+        items.append({
+            'text': text if len(text) <= 44 else text[:44] + '…',
+            'polarity': polarity,
+        })
+    return {'items': items, 'total': int(len(d))}
+
+
 @app.get('/api/pages/nav')
 def page_nav():
     """页面清单，给前端渲染导航。
@@ -443,12 +503,18 @@ def page_nav():
              'subtitle': '这一周为什么涨了', 'icon': 'route'},
             {'key': 'reasons', 'title': '原因治理',
              'subtitle': '9 个原因各自值不值得管', 'icon': 'layers'},
+            # 【自检页已从导航移除（2026-11-03）】
+            # 那一页讲的是"我们验了什么、在多大的数据上验的"，是给评审/自己看的
+            # 质保材料，对业务用户没有意义 —— 用户打开它只会觉得"这系统怎么在自夸"。
+            # 原位换成了「预警策划」：同样是给读者看的，但给的是
+            # "哪几周要解释、下一周谁去做什么"，读者能直接拿去开会。
+            # EvalPage.tsx 仍留在前端（未接入路由），/api/pages/eval 与 /api/eval 也仍可用。
+            {'key': 'plan', 'title': '预警策划',
+             'subtitle': '哪几周要解释、那一周谁做什么', 'icon': 'alert'},
             {'key': 'reviews', 'title': '评论洞察',
              'subtitle': '情感 · 抱怨点 · 画像', 'icon': 'message'},
             {'key': 'competitors', 'title': '竞品雷达',
              'subtitle': '我们在同类里处在什么位置', 'icon': 'target'},
-            {'key': 'eval', 'title': '自检',
-             'subtitle': '验了什么、在多大的数据上验的', 'icon': 'check'},
             {'key': 'chat', 'title': '问答',
              'subtitle': '按需深入，让 Agent 自己查', 'icon': 'spark'},
         ],
@@ -495,20 +561,41 @@ def page_nav():
 # 不应该让整个服务起不来。
 @app.on_event('startup')  # noqa: deprecated（本机 FastAPI 版本仍支持）
 def _warmup() -> None:
-    """后台预热最贵的两页，让首屏不承担冷启动成本。"""
+    """后台预热最贵的几页，让首屏不承担冷启动成本。
+
+    【v3.3：总览页做了类目联动，冷启动变贵了】
+    热力矩阵要 4 个类目 × 52 周各跑一次 diagnose_week（约 1.2s），
+    加上全店那份共 1.8s。用户第一次打开总览页会干等将近两秒，
+    而这 1.8s 里没有一件事是"因为这次查询"才需要的 —— 都是常量。
+    所以启动时就跑一遍，把 _DIAG 缓存填满；之后切类目是 30–50ms。
+    """
     import threading
     import time as _t
 
     def _run() -> None:
         try:
             from pages import dashboard, review_overview
+            from tools.data_hub import DataHub
+            hub = None
+            try:
+                from pages import get_hub
+                hub = get_hub()
+            except Exception:          # noqa: BLE001
+                pass
+            cats = list(hub.categories) if hub is not None else []
+
             t0 = _t.time()
-            dashboard()
+            dashboard()                 # 全店，顺带把 4 个类目的热力缓存填满
             t1 = _t.time()
-            review_overview('本店')
+            # 各类目那一份也预热：点类目切换时应该是 0 等待
+            for c in cats:
+                dashboard(c)
             t2 = _t.time()
+            review_overview('本店')
+            t3 = _t.time()
             print(f'[warmup] dashboard {int((t1 - t0) * 1000)}ms · '
-                  f'reviews {int((t2 - t1) * 1000)}ms', flush=True)
+                  f'{len(cats)} 类目 {int((t2 - t1) * 1000)}ms · '
+                  f'reviews {int((t3 - t2) * 1000)}ms', flush=True)
         except Exception as e:          # noqa: BLE001
             print(f'[warmup] 跳过（不影响服务）：{e}', flush=True)
 
@@ -517,7 +604,39 @@ def _warmup() -> None:
 
 _DIST = ROOT.parent / 'frontend' / 'dist'
 if _DIST.is_dir():
-    app.mount('/', StaticFiles(directory=str(_DIST), html=True), name='static')
+    # 【为什么必须给 index.html 加 no-store】
+    # 这个项目踩过一次很难受的坑：改完前端、重新 build，
+    # 打开页面看到的还是旧界面，反复确认代码、确认 dist、curl 服务端都对 ——
+    # 因为浏览器缓存了 **index.html**。
+    #
+    # 关键点：Vite 的产物文件名带 hash（index-t9UcBUyj.js），
+    # 所以 JS 本身改了名就不会被旧缓存命中。但 index.html 是固定名字，
+    # 它一旦被缓存，就永远指向上一版那个已经被删掉的 bundle。
+    # 表现是"代码明明改了，界面纹丝不动"，而所有检查都是绿的 ——
+    # 这类假失败的排查成本远高于它本身的复杂度。
+    #
+    # 两类文件要用相反的策略：
+    #   assets/*   文件名含 hash → 内容变则名变 → 可以长缓存
+    #   index.html 名字固定      → 必须每次回服务器
+    #
+    # 【为什么用子类而不是 @app.middleware('http')】
+    # 中间件会给包括 /api 在内的**每一个**请求都套一层，
+    # 而这里只需要改一类静态文件的响应头。子类只在 StaticFiles 自己的
+    # 响应路径上生效，API 完全不受影响。
+    class _NoCacheHtmlStatic(StaticFiles):
+        async def get_response(self, path, scope):
+            resp = await super().get_response(path, scope)
+            if path.endswith('.html') or path in ('', '.'):
+                resp.headers['Cache-Control'] = 'no-store, must-revalidate'
+                resp.headers['Pragma'] = 'no-cache'
+                # Starlette 的 MutableHeaders 是大小写不敏感的映射，
+                # 但没有 dict 的 pop() —— 在这里用它会让**整页 500**。
+                # 想删某个头只能 del 或判断存在后删除。
+                if 'etag' in resp.headers:
+                    del resp.headers['etag']
+            return resp
+
+    app.mount('/', _NoCacheHtmlStatic(directory=str(_DIST), html=True), name='static')
 
 
 if __name__ == '__main__':

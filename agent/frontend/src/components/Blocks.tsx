@@ -160,7 +160,7 @@ function Decomp({ block }: { block: DecompBlock }) {
             <span className="legend-item" key={i}>
               <span
                 className="legend-swatch"
-                style={{ background: p.tone === 'primary' ? 'var(--accent)' : '#3a4457' }}
+                style={{ background: p.tone === 'primary' ? 'var(--accent)' : '#33333a' }}
               />
               {p.label}
               <b>{p.value > 0 ? '+' : ''}{p.value.toFixed(2)}pp</b>
@@ -243,7 +243,7 @@ function Table({ block }: { block: Block }) {
       <div className="tbl-wrap">
         <table className="tbl">
           <thead>
-            <tr>{cols.map((c, i) => <th key={i}>{c}</th>)}</tr>
+            <tr>{cols.map((c, i) => <th key={i} scope="col">{c}</th>)}</tr>
           </thead>
           <tbody>
             {rows.map((r, i) => (
@@ -443,7 +443,7 @@ function Curve({ block }: { block: Block }) {
               top: `${yPct(p.expected_profit)}%`,
               width: s, height: s, borderRadius: '50%',
               background: isOpt ? 'var(--accent)' : 'var(--panel)',
-              border: `1.5px solid ${isOpt ? '#06231f' : '#4a5468'}`,
+              border: `1.5px solid ${isOpt ? '#0b0b0c' : '#3d3d43'}`,
               transform: 'translate(-50%, -50%)',
               pointerEvents: 'none',
             }} />
@@ -587,7 +587,7 @@ function Trend({ block }: { block: Block }) {
           top: `${yPct(last.value)}%`,
           width: 5, height: 5, borderRadius: '50%',
           background: 'var(--accent)',
-          border: '1.5px solid #06231f',
+          border: '1.5px solid #0b0b0c',
           transform: 'translate(-50%, -50%)',
           pointerEvents: 'none',
         }} />
@@ -684,8 +684,15 @@ function WordCloud({ block }: { block: WordCloudBlock }) {
             <div className="wc-word">{it.word}</div>
 
             <div className="wc-track">
+              {/* 【v4：条的颜色按数值分三档灰，与总览页/评论页同一套语言】
+                  原来这里统一是红色。灰阶方案下，"最重的抱怨"应该靠亮度
+                  自己站出来，而不是靠"所有词都是红的"。
+                  分级阈值和 BiKit 的 HBars 保持一致：>66% 亮、>33% 中、其余暗。 */}
               <div
-                className="wc-fill"
+                className={`wc-fill ${
+                  it.count / maxCount > 0.66 ? 'is-hi'
+                    : it.count / maxCount > 0.33 ? 'is-mid' : 'is-lo'
+                }`}
                 style={{ width: `${Math.max((it.count / maxCount) * 100, 3)}%` }}
               />
             </div>

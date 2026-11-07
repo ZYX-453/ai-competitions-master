@@ -213,7 +213,29 @@ export function ChatPage({ health, nav }: {
       </aside>
 
       <div className="chat-stage">
-        <div className="stage-scroll" ref={scrollRef}>
+        {/* 【流式区域的读屏播报：全项目原来一处都没有】
+            问答页是核心功能，但屏幕阅读器用户问完问题后**什么也听不到** ——
+            所有内容都靠视觉增量渲染，辅助技术完全捕捉不到。
+
+            【为什么不直接给 .stage-scroll 加 aria-live】
+            流式输出每个 token 都在变，整块当作 live region 会让读屏
+            每来几个字就播报一次，变成听觉轰炸，比不播报更糟。
+            正确做法是"完成时播报一次摘要"，所以另建一个隐藏的 live region。
+
+            【aria-atomic + 只在 done 后填内容】
+            · aria-atomic="true"：每次变化重读整个区域，而不是只读增量
+            · 内容取自 turn.done 存在时的 headline（后端已组装好的一句话结论）
+            · 生成中留空：进度由 .stage-scroll 的 aria-busy 表达，
+              读者不需要听"正在查询、正在计算"这种逐条播报
+
+            这是视觉隐藏（.sr-only），不占布局、不影响任何现有排版。 */}
+        <div className="sr-only" aria-live="polite" aria-atomic="true">
+          {lastTurn?.done && lastTurn.answer
+            ? `${lastTurn.question}。回答：${lastTurn.answer.headline}`
+            : ''}
+        </div>
+
+        <div className="stage-scroll" ref={scrollRef} aria-busy={busy}>
           {turns.length === 0 ? (
             <EmptyState meta={meta} onPick={ask} />
           ) : (
@@ -223,10 +245,16 @@ export function ChatPage({ health, nav }: {
 
         <div className="composer-wrap">
           <div className="composer">
+            {/* 【显式 label 而不是只靠 placeholder】
+                placeholder 在用户开始输入后立即消失，读屏用户回到输入框时
+                听不到"这是什么框"。sr-only 的 label 用 for/id 关联，永久有效。 */}
+            <label className="sr-only" htmlFor="chat-input">输入你的业务问题</label>
             <textarea
+              id="chat-input"
               rows={1}
               value={input}
               placeholder="问一个业务问题，例如：第 44 周退货率为什么涨了"
+              aria-describedby="chat-hint"
               onChange={(e) => {
                 setInput(e.target.value)
                 const el = e.currentTarget
@@ -236,11 +264,11 @@ export function ChatPage({ health, nav }: {
               onKeyDown={onKeyDown}
               disabled={busy}
             />
-            <button className="send-btn" onClick={() => ask(input)} disabled={busy || !input.trim()} title="发送">
+            <button className="send-btn" onClick={() => ask(input)} disabled={busy || !input.trim()} title="发送" aria-label="发送问题">
               {busy ? <div className="spinner" /> : <Arrow />}
             </button>
           </div>
-          <div className="hint-row">
+          <div className="hint-row" id="chat-hint">
             <span>
               <kbd>Enter</kbd> 发送 · <kbd>Shift</kbd>+<kbd>Enter</kbd> 换行
               {busy && ' · 推理中，可点击推理链展开证据'}

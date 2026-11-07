@@ -1,0 +1,23 @@
+# 差评炼金炉 · 归因诊断 Agent
+#
+# 装法（项目根目录）：
+#   python -m venv .venv
+#   .venv/Scripts/pip install -r requirements.txt      # Windows
+#   .venv/bin/pip install -r requirements.txt          # macOS / Linux
+#
+# Python 3.10+（代码用了 `int | None` 类型语法，3.9 及以下会 SyntaxError）。
+#
+# 下面五个是运行 Agent 的最小集合，缺一个 main.py 就起不来。
+# 版本号是 2026-11-02 实测通过的版本——注意 pandas 是 3.x，
+# 项目最初写的时候是 2.x。整套功能（含四套验收脚本 31+12+3 条断言）
+# 在 3.1.0 下全部通过，但这是实测而非保证。要绝对稳妥就改成 "pandas>=2.0,<3.0"。
+fastapi>=0.100,<1.0
+uvicorn>=0.23,<1.0
+pandas>=2.0
+numpy>=1.24
+jieba>=0.42
+
+# 仅重画 reports/figs 里那 10 张图时需要（scripts/make_charts.py）。
+# 运行 Agent 本体不需要，所以没放进上面的最小集合。
+# 想重新生成图表再单独装：
+#   pip install matplotlib

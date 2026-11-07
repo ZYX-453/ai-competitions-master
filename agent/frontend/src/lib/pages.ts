@@ -75,6 +75,10 @@ export interface CatRow {
   rr_last12: number
   rr_prev: number
   delta_pp: number
+  /** 该类目全年退货损失（与 KPI 的 loss_total 同一列 sum，四类目相加≈全店） */
+  loss_total: number
+  /** 单条退货平摊损失 */
+  loss_per: number
   sku_count: number
 }
 
@@ -87,6 +91,36 @@ export interface CauseRow {
   loss_per: number
 }
 
+/* ---- v3.3 联动看板：两张矩阵 ----
+ * 【为什么矩阵要整份发下来，而不是切换时再请求】
+ * 切换类目要的是"别的类目长什么样"做对照，一次拿全比来回请求快；
+ * 而且 by_category 本身就是切换器，它必须在任何范围下都完整。
+ * 注意每个格子的 share 也是后端算的 —— 分母随类目变，
+ * 前端一除就是第二份口径实现。 */
+export interface CauseCell {
+  code: string
+  category: string
+  n: number
+  share: number
+  loss: number
+}
+
+export interface HeatCell {
+  week: number
+  rr: number | null
+  dev_pp: number | null
+  /** 二项 z。**上色键用它，不用 dev_pp**：dev 跨类目不可比（服饰 28% 天然抖 ±3pp）。 */
+  z: number | null
+  is_anomaly: boolean
+  trivial_sig: boolean
+}
+
+export interface HeatRow {
+  category: string
+  base_rr: number | null
+  cells: HeatCell[]
+}
+
 export interface DashboardData {
   kpi: Kpi
   baseline: { mean_rr: number; std_rr: number; band_low: number; band_high: number }
@@ -95,6 +129,22 @@ export interface DashboardData {
   by_category: CatRow[]
   causes: CauseRow[]
   anomalies: WeekPoint[]
+  cause_matrix: {
+    causes: { code: string; cause: string }[]
+    categories: string[]
+    cells: CauseCell[]
+  }
+  heatmap: {
+    rows: HeatRow[]
+    weeks: number[]
+    /* 满色阈值（z）。**后端给，前端不许拍**：
+       颜色的深浅直接决定读者觉得哪块最疼，那是判断不是装饰。 */
+    scale_z: number
+    /** 统计显著线（z=2），用于图例标注 */
+    sig_z: number
+  }
+  /** 当前口径范围：'全店' 或某个类目名 */
+  scope: string
   evidence: { rows_scanned: number; returns_scanned: number; scope: string }
 }
 
@@ -124,11 +174,21 @@ export interface StructureItem {
 export interface PromoBlock {
   scope: string
   promo_weeks: number[]
+  /** 当前选中的这一周本身是不是促销周。
+      promo_mechanism 算的是"促销周 vs 非促销周"的整体对照，不接 week，
+      所以在非促销周（比如第 52 周，退货率还在降）也会返回同一份数字。
+      前端必须靠这个字段决定展不展示，否则会把促销的结论安到无关的一周头上。 */
+  is_promo_week: boolean
   rr_promo: number
   rr_base: number
   actual_gap_pp: number
   structure_pp: number
   mechanism_pp: number
+  /** 分解的闭合差额：actual_gap_pp − (structure_pp + mean_diff_pp)。
+      不是算错 —— 结构项是加权分解，机制项是 151 个 SKU 配对差的等权平均，
+      权重口径不同，相加必然对不上按订单加权的实际涨幅。
+      后端算好下发，前端不自己减，否则差额会变成没人认领的数字。 */
+  residual_pp: number
   structure_share: number
   n_sku: number
   mean_diff_pp: number
@@ -171,6 +231,16 @@ export interface AttributionData {
   suspicious_small: boolean
   scope: string
   category_contribution: ContribRow[]
+  /* 【贡献分解的闭合项】
+     Σ contribution_pp 并不严格等于 delta_pp，差的那部分是**结构效应**：
+     订单在类目之间迁移带来的影响（本周订单流向了退货率更低的类目）。
+     瀑布图必须把它画成独立一节，否则几根柱子加起来对不上总柱。
+     由后端 pages.py 算好，前端不自己减 —— 否则"这个差是什么"
+     就变成了一个没人命名的减法。 */
+  contribution_sum_pp?: number
+  structure_effect_pp?: number
+  /** 结构效应占整体变化的比例（0–1），用来说明"这次变化里有多少来自换货" */
+  structure_effect_ratio?: number
   structure?: {
     scope: string
     total_returns: number
@@ -181,9 +251,6 @@ export interface AttributionData {
     evidence: Record<string, unknown>
   }
   promo?: PromoBlock
-  week_causes?: { cause: string; code: string; n: number; share: number; loss: number }[]
-  week_returns_total?: number
-  week_by_category: { category: string; returns: number; orders: number; rr: number }[]
   available_weeks: { week: number; is_anomaly: boolean; delta_pp: number }[]
 }
 
@@ -192,6 +259,12 @@ export interface ReasonRow {
   l1: string
   l2: string
   code: string
+  /** 这一行是不是"没归上原因"（code = X）。
+      【为什么后端要显式给这一位，而不是前端判 code === 'X'】
+      它是一个**身份**判断，不是排版判断：这行不能派活、不能跟其余行
+      按同一把尺子比"值不值得管"。放在前端写死，就等于把业务含义
+      藏进了一个字符串比较里，换一份数据换个代码就悄悄失准。 */
+  is_void: boolean
   n: number
   share: number
   loss: number
@@ -201,12 +274,34 @@ export interface ReasonRow {
   recoverable: number
 }
 
+/* 矩阵的逐格明细。
+   【为什么要单独下发一份，而不是让前端拿 share 反推】
+   浮层要回答"这 15% 是多少条、多少钱"，两个绝对量后端才有。
+   前端若能自己乘除，就会出现"矩阵里的占比"和"表里的占比"各算一遍，
+   迟早对不上（本项目已经因为这类重算出过单位错）。 */
+export interface MatrixCell {
+  category: string
+  code: string
+  name: string
+  n: number
+  loss: number
+  share: number
+  loss_share: number
+}
+
 export interface MatrixData {
   causes: string[]
   cause_codes: string[]
   categories: string[]
   rows: Record<string, number | string>[]
+  /** 每列在"占条数"口径下的最大值，用于着色归一 */
   col_max: Record<string, number>
+  /** 每列在"占损失"口径下的最大值。两个口径各有一套尺子，
+      换口径时不重新归一的话，颜色深浅会跟数字对不上。 */
+  col_max_loss: Record<string, number>
+  cells: MatrixCell[]
+  /** 每个类目的退货条数与损失合计，矩阵行标签旁边要显示"这一行是按多少条算的" */
+  cat_totals: Record<string, { n: number; loss: number }>
 }
 
 export interface ReasonsData {
@@ -214,6 +309,11 @@ export interface ReasonsData {
   categories: string[]
   total_returns: number
   total_loss: number
+  // 【可挽回的两个量由后端下发】
+  // 前端曾经自己写 sum(rows.recoverable) / total_loss * 100，
+  // 这一页其余占比全由后端给，只有这一个在前端算 —— 四舍五入位置不同就会末位对不上。
+  recoverable_total: number
+  recoverable_pct: number
   rows: ReasonRow[]
   matrix: MatrixData
   evidence: Record<string, unknown>
@@ -375,4 +475,100 @@ export interface EvalData {
   suites: EvalSuite[]
   data_scale: Record<string, number>
   independence: { claim: string; how: string; proof: string[] }
+}
+/* ------------------------------------------------------- 预警 · 策划 */
+/** 一周的预警条目。rr_* 与 delta_pp 都是**后端算好的成品**（百分数 / 百分点），
+ *  前端只负责显示 —— 一旦在这里做除法，"这个 17.04%" 就有了第二份口径。 */
+export interface PlanAlert {
+  week: number
+  rr_now: number
+  rr_base: number
+  delta_pp: number
+  z: number
+  orders: number
+  is_anomaly: boolean
+  trivial_sig: boolean
+}
+
+export interface PlanTrendPoint {
+  week: number
+  rr_now: number
+  rr_base: number
+  delta_pp: number
+  /** 后端按同一套双门槛派生；只有 alert 点允许进入策划明细 */
+  status: 'alert' | 'improving' | 'normal'
+}
+
+export interface PlanHeadline {
+  week: number
+  rr_now: number
+  rr_base: number
+  delta_pp: number
+  z: number
+  returns: number
+  orders: number
+  is_anomaly: boolean
+  trivial_sig: boolean
+  enough_sample: boolean
+  /** 双门槛的两个数：判定的依据要能自己核对，不能只给一个勾 */
+  min_effect_pp: number
+  detectable_pp: number
+  scope: string
+}
+
+/** 类目对本周涨幅的贡献（contribution_pp 单位是百分点，可直接相加≈总 Δpp） */
+export interface PlanContribution {
+  category: string
+  contribution_pp: number
+  rr_now: number
+  rr_base: number
+  gap_pp: number
+  orders_now: number
+}
+
+export interface PlanAction {
+  action: string
+  impact_on: string
+  owner: string
+  kpi: string
+}
+
+export interface PlanReason {
+  reason: string
+  count: number
+  /** 占本周退货单量的比例（百分数 0–100，后端已乘 100）—— 不要再 ×100 */
+  share: number
+  loss: number
+  /** false = 这一类没有既定动作清单（缺的是方案，不是数据） */
+  has_plan: boolean
+  cause_name: string
+  actions: PlanAction[]
+  plan_note: string
+  /** 占本周损失的比例（百分数，后端算好）—— 前端不做除法 */
+  loss_share: number
+}
+
+export interface PlanData {
+  scope: string
+  week: number
+  alerts: PlanAlert[]
+  /** 52 周实际值/基线/状态；走势与预警表共用同一批诊断结果 */
+  trend: PlanTrendPoint[]
+  alert_total: number
+  /** 显著改善的周数：双门槛是双向的，这些周不该进预警，但也不能假装没有 */
+  improving_total: number
+  headline: PlanHeadline
+  contributions: PlanContribution[]
+  /** 各列贡献之和（pp）—— 与 headline.delta_pp 的差额由结构变化解释 */
+  contrib_sum_pp: number
+  /** delta_pp 减去各列之和剩下的未分配部分（pp），后端算好，前端只显示 */
+  contrib_rest_pp: number
+  /** 当周实际有几个类目参与拆分（页面上只列前 4 个） */
+  contrib_n: number
+  reasons: PlanReason[]
+  loss_total: number
+  loss_actionable: number
+  /** 有动作的损失占本周总损失的比例（百分数） */
+  actionable_pct: number
+  evidence: Record<string, unknown>
 }

@@ -26,7 +26,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import shutil
 import sys
 from pathlib import Path
 
@@ -146,8 +145,13 @@ async def main() -> int:
         print(f'找不到知识库文件：{KB}')
         return 2
 
-    bak = KB.with_suffix('.json.bak_check')
-    shutil.copy2(KB, bak)
+    # 【备份放内存，不落盘】
+    # 原来这里 shutil.copy2 出一个 data/reason_kb.json.bak_check 再在 finally 里删掉。
+    # 两个问题：① 往 data/ 里写临时文件，测试会在项目数据目录留下垃圾；
+    # ② 删它要经过环境的 safe-delete 钩子，钩子一拦，进程直接被中断
+    #    （表现为退出码 1、没有 FAIL 行、PASS 永远打不出来，看起来像断言失败）。
+    # 读进内存就能完全避开删除操作 —— 恢复也不依赖这个文件是否还在。
+    orig = KB.read_bytes()
     total: list[str] = []
     try:
         # ---------- 故障 ①：文件不存在 ----------
@@ -159,27 +163,41 @@ async def main() -> int:
         KB.write_text('{ this is not json ', encoding='utf-8')
         total += await run_one('吊牌缺失怎么处理', 'JSON损坏')
     finally:
-        # 恢复：优先用备份，其次把移走的挪回来
+        # 恢复：优先把移走的挪回来（同盘 rename，原子的），否则用内存原件重写
         moved = KB.with_suffix('.json.moved')
         if moved.exists():
             os.replace(moved, KB)
-        elif not KB.exists():
-            shutil.copy2(bak, KB)
         else:
-            shutil.copy2(bak, KB)
-        try:
-            if bak.exists():
-                os.remove(bak)
-        except OSError:
-            pass
+            KB.write_bytes(orig)
 
+    # 【恢复必须校验，不能靠"没报错"就当好了】
+    # 这个脚本会真的把线上在用的知识库改名、写坏，所以"恢复成功"本身
+    # 就是它最该保证的一件事。原版只有一个 `except OSError: pass`，
+    # 恢复失败会被静默吞掉，然后脚本继续去评判措辞 ——
+    # 也就是说它可能一边把知识库弄坏、一边报 PASS。
+    # 现在恢复完必须逐字节比对：文件在、内容和开工前完全一致。
+    if not KB.exists():
+        print(f'★ 恢复失败：{KB} 不存在了 —— 知识库已被测试破坏')
+        return 3
+    try:
+        now = KB.read_bytes()
+    except OSError as e:
+        print(f'★ 恢复失败：读不回来 {e}')
+        return 3
+    if now != orig:
+        print(f'★ 恢复不完整：{len(now)} 字节，开工前是 {len(orig)} 字节')
+        try:
+            json.loads(now.decode('utf-8'))
+        except Exception:                                   # noqa: BLE001
+            print('★ 恢复后的文件不是合法 JSON —— 这份知识库现在是坏的')
+        return 3
     print('\n' + '=' * 60)
     if total:
         print(f'FAIL  {len(total)} 处')
         for e in total:
             print(f'  - {e}')
         return 1
-    print('PASS  知识库失败场景措辞全部正确')
+    print('PASS  知识库失败场景措辞全部正确（知识库已原样恢复，逐字节一致）')
     return 0
 
 
