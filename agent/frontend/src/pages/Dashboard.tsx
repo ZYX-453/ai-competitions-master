@@ -22,7 +22,8 @@
  * 一定是查表而不是读柱子的高度。所以两者并存，不是过渡状态。
  * =========================================================================== */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getJson } from '../lib/sse'
+import type { ReactNode } from 'react'
+import { useFetch } from '../lib/useFetch'
 import type { CauseRow, CatRow, DashboardData, WeekPoint } from '../lib/pages'
 import { Card, Stat, Empty, Loading, Fail, nf, money, pp } from '../components/PageKit'
 import {
@@ -58,13 +59,52 @@ export function Dashboard({
       return null
     }
   })
-  const [d, setD] = useState<DashboardData | null>(null)
-  const [err, setErr] = useState('')
-  const [tick, setTick] = useState(0)
   const [causeMetric, setCauseMetric] = useState<CauseMetric>('share')
   const [catMetric, setCatMetric] = useState<CatMetric>('rr')
   /** 同一个 scope 第二次切换时用缓存，只在这两个之间复用 */
   const [cache, setCache] = useState<Record<string, DashboardData>>({})
+
+  /* 请求地址。scope 为空表示全店。 */
+  const dashUrl = scope
+    ? `/api/pages/dashboard?category=${encodeURIComponent(scope)}`
+    : '/api/pages/dashboard'
+  const { data: fresh, err, retry, dataUrl } = useFetch<DashboardData>(dashUrl)
+
+  /* 【d 为什么不是把 useFetch 的 data 直接拿来用】
+     useFetch 在 url 变化时不会把 data 清空（要靠它撑住"翻周不白屏"），
+     而这一页自己还有一份按范围分开的缓存。两个来源混起来会出现
+     "服饰的标签 + 全部类目的数字"——哪怕只错 100ms，
+     读者记住的也是错的那个数。
+     所以这里显式挑：刚回来的那份（dataUrl === dashUrl）用 fresh，
+     否则退到缓存里该范围的旧副本，都没有才交给 Loading 分支。 */
+  const d = useMemo<DashboardData | null>(() => {
+    if (fresh && dataUrl === dashUrl) return fresh
+    return cache[scope || '__all__'] ?? null
+  }, [fresh, dataUrl, dashUrl, cache, scope])
+
+  /* 【加载中的类目按钮从哪来】
+     刚进来时 d 是 null，没有 by_category 可用，但 ScopePick 必须已经能点
+     （否则"切类目"这件事在第一次请求完成前不存在）。
+     拿缓存里任意一份兜底就行：后端在**任何 scope 下都返回全部 4 个类目**
+     （by_category 是全集，只是数值随 scope 变），所以随便哪份拿到的按钮列表
+     都是同一套，不会出现"服饰那份里少了生鲜"。
+     一份缓存都没有时先给空数组，选择器只剩「全店」一个按钮 —— 这仍然比
+     整页空白好，因为它至少能点。 */
+  const anyCached = useMemo(
+    () => Object.values(cache)[0] ?? null,
+    [cache],
+  )
+  const allCats = (anyCached ?? fresh)?.by_category.map((c) => c.category) ?? []
+
+  /* 把刚回来的那份写进缓存，下次切回同一范围时秒开。
+     守卫 c[key] === fresh 是必须的：setCache 会让本组件重渲染，
+     没有这道判断就成了"渲染→写缓存→再渲染"的死循环。 */
+  useEffect(() => {
+    if (!fresh || dataUrl !== dashUrl) return
+    const key = scope || '__all__'
+    setCache((c) => (c[key] === fresh ? c : { ...c, [key]: fresh }))
+  }, [fresh, dataUrl, dashUrl, scope])
+
   /* 趋势图上"当前关注"的周（悬停的那一周，或框选出的那一段）。
      提升到这里是为了让下面的热力矩阵能同步高亮对应的列 ——
      "这周整体偏高，是哪几个类目撑起来的"必须两张图一起看才答得出来，
@@ -81,19 +121,6 @@ export function Dashboard({
     const next = window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash
     window.history.replaceState(null, '', next)
   }, [scope])
-
-  useEffect(() => {
-    const key = scope || '__all__'
-    if (cache[key]) { setD(cache[key]); setErr(''); return }
-    setErr('')
-    const qs = scope ? `?category=${encodeURIComponent(scope)}` : ''
-    getJson<DashboardData>(`/api/pages/dashboard${qs}`)
-      .then((data) => {
-        setD(data)
-        setCache((c) => ({ ...c, [key]: data }))
-      })
-      .catch((e) => setErr(String(e)))
-  }, [scope, tick])   // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---- 派生：全部是"取哪一列"，没有一处四则运算 ---- */
   // 【max 和 items 必须一起算，不能各算一遍】
@@ -237,30 +264,53 @@ export function Dashboard({
     },
   ], [d])
 
-  if (err) return <Fail msg={err} onRetry={() => { setCache({}); setTick((x) => x + 1) }} />
-  if (!d) return <Loading label={scope ? `汇总 ${scope} 52 周` : '汇总 52 周数据'} />
-
-  const k = d.kpi
-  const loss = money(k.loss_total)
-  const gmv = money(k.gmv_year)
-
-  return (
+  /* 【错误与加载都不能整页 return，否则用户被自己锁住】
+     原来的写法是 `if (!d) return <Loading/>`，把 ScopePick 一起卸载了。
+     实测（切到"服饰"那一瞬间）：类目按钮全部消失、卡片数归 0，
+     用户看到的是一整片空白加载页 —— 想反悔点回"全店"都没得点，
+     只能等请求回来。而这一页的第一次取数要 1-2 秒（4 类目热力矩阵）。
+     所以外壳（选择器）常驻，只有内容区跟着状态走。 */
+  const cats = d?.by_category.map((c) => c.category) ?? allCats
+  const shell = (body: ReactNode) => (
     <div className="pg">
       {/* 弹幕层：无痕开关，纯氛围，挂在范围选择器上方这条横向空白带 */}
       <Danmaku category={scope} />
 
       {/* 切换范围会换掉整页分母，所以放在最上面、且任何时候都可见 */}
       <ScopePick
-        categories={d.by_category.map((c) => c.category)}
+        categories={cats}
         value={scope}
         onChange={(v) => setScope(v)}
         latest={(
           <span className="bi-scope-hint">
-            口径：<b>{d.scope}</b> · 52 周
+            口径：<b>{d?.scope ?? (scope || '全店')}</b> · 52 周
           </span>
         )}
       />
+      {body}
+    </div>
+  )
 
+  /* 重试时连缓存一起清掉：出错的分支里缓存很可能就是那份坏数据
+     （比如后端某次返回了空 heatmap），留着它会立刻被 d 的 fallback 捞回来，
+     点"重试"看起来毫无反应。 */
+  if (err) {
+    return shell(
+      <Fail msg={err} onRetry={() => { setCache({}); retry() }} />,
+    )
+  }
+  if (!d) {
+    return shell(
+      <Loading label={scope ? `汇总 ${scope} 52 周` : '汇总 52 周数据'} />,
+    )
+  }
+
+  const k = d.kpi
+  const loss = money(k.loss_total)
+  const gmv = money(k.gmv_year)
+
+  return shell(
+    <>
       <div className="pg-kpi-row">
         <Stat
           label="年订单"
@@ -413,7 +463,7 @@ export function Dashboard({
           <> · <button className="bi-link" onClick={() => setScope(null)}>退回全店</button></>
         )}
       </div>
-    </div>
+    </>,
   )
 }
 

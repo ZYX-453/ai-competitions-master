@@ -28,7 +28,7 @@
  * =========================================================================== */
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { getJson } from '../lib/sse'
+import { useFetch } from '../lib/useFetch'
 import type { AttributionData } from '../lib/pages'
 import { Card, Stat, Bar, Empty, Loading, Fail, nf, money, pp } from '../components/PageKit'
 import { Segmented } from '../components/BiKit'
@@ -38,11 +38,6 @@ import type { WaStep, TreeLeaf } from '../components/BiCharts'
 export function Attribution({
   week, setWeek,
 }: { week: number; setWeek: (w: number) => void }) {
-  const [d, setD] = useState<AttributionData | null>(null)
-  const [err, setErr] = useState('')
-  const [tick, setTick] = useState(0)
-  const [busy, setBusy] = useState(false)
-
   /* 【为什么是"钉住"而不是"筛选"】
      这一页是按周诊断的，没有"只看服饰"这个维度 ——
      Dashboard 才有（那边点类目会换全店口径，要重新请求）。
@@ -62,21 +57,22 @@ export function Attribution({
   const [stPick, setStPick] = useState<string | null>(null)
   const pickSt = (k: string) => setStPick(stPick === k ? null : k)
 
-  useEffect(() => {
-    // 【week<=0 表示"周次还没确定"，不许发请求】
-    // App 的 week 初值是 0（见 App.tsx 里为什么不用写死的 44）：
-    // nav 还没回来时它确实是 0，而 0 不是合法周次。
-    // 不拦住的话会打出 ?week=0，后端 diagnose_week(0) 返回 ok=False，
-    // 用户先看到一次"判定失败"再看到正确结果 —— 一次莫名其妙的红屏。
-    if (!week || week <= 0) return
-    setBusy(true)
-    setErr('')
-    getJson<AttributionData>(`/api/pages/attribution?week=${week}`)
-      .then((r) => { setD(r); setBusy(false) })
-      .catch((e) => { setErr(String(e)); setBusy(false) })
-  }, [week, tick])
+  /* 【请求走统一的 useFetch，主要为了两件事】
+     ① 竞态：这一页最常发生的操作就是连点周次（W44 → W45 → W46），
+        三个请求并发，谁后到谁生效。旧代码没有序号校验，
+        一旦 W44 最后返回，屏幕上就是 W44 的数字配 W46 的标签 ——
+        读者会拿错的数去解释另一周，而且这种情况不可复现、演示撞不到。
+     ② 超时：getJson 现在自带 20s 超时 + 一次重试，
+        避免后端卡住时页面永久转圈（原来 catch 永远不触发）。
 
-  if (err) return <Fail msg={err} onRetry={() => setTick((x) => x + 1)} />
+     url 传 null 表示"周次还没确定，先别发" —— 见下面 week<=0 的注释。 */
+  const {
+    data: d, err, busy, retry,
+  } = useFetch<AttributionData>(
+    week && week > 0 ? `/api/pages/attribution?week=${week}` : null,
+  )
+
+  if (err) return <Fail msg={err} onRetry={retry} />
   if (!week || week <= 0) return <Loading label="确定默认周次" />
   if (!d) return <Loading label={`拆解第 ${week} 周`} />
 

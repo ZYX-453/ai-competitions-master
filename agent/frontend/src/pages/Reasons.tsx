@@ -25,7 +25,7 @@
  * =========================================================================== */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { getJson } from '../lib/sse'
+import { useFetch } from '../lib/useFetch'
 import type { MatrixCell, ReasonsData } from '../lib/pages'
 import { Card, Stat, Bar, Empty, Loading, Fail, nf, money } from '../components/PageKit'
 import { Segmented, useTip } from '../components/BiKit'
@@ -41,9 +41,6 @@ export function Reasons({
   category: string
   setCategory: (c: string) => void
 }) {
-  const [d, setD] = useState<ReasonsData | null>(null)
-  const [err, setErr] = useState('')
-  const [tick, setTick] = useState(0)
   const [sortBy, setSortBy] = useState<SortKey>('loss')
   /** 【升序也要给】原来点表头只有"降序"一种结果，
       想看"哪个原因最不值得管"就得自己从最后一行往上看 —— 那不是排序，那是倒着读。 */
@@ -58,13 +55,16 @@ export function Reasons({
   const gridRef = useRef<HTMLTableElement>(null)
   const { show, hide, el: tipEl } = useTip()
 
-  useEffect(() => {
-    setErr('')
-    const q = category ? `?category=${encodeURIComponent(category)}` : ''
-    getJson<ReasonsData>(`/api/pages/reasons${q}`)
-      .then(setD)
-      .catch((e) => setErr(String(e)))
-  }, [category, tick])
+  /* 【竞态：切类目时矩阵会整体换掉】
+     这一页的矩阵是 9 原因 × 4 类目的负评率，切类目要重新算分母。
+     连点两个类目而旧响应后到，屏幕上就是**旧类目的 36 个格子
+     配着新类目的筛选高亮** —— 每个格子都有数字、都像对的。
+     用 useFetch 的请求序号挡掉。 */
+  const {
+    data: d, err, retry,
+  } = useFetch<ReasonsData>(
+    `/api/pages/reasons${category ? `?category=${encodeURIComponent(category)}` : ''}`,
+  )
 
   /* 【hooks 全部放在早退之前】
      `if (!d) return <Loading/>` 之后再写 useMemo，就是"这次渲染 3 个 hook、
@@ -84,7 +84,7 @@ export function Reasons({
     return m
   }, [d])
 
-  if (err) return <Fail msg={err} onRetry={() => setTick((x) => x + 1)} />
+  if (err) return <Fail msg={err} onRetry={retry} />
   if (!d) return <Loading label="汇总 9 类退货原因" />
 
   /* 【可排序表头必须同时满足四件事，少一件就是半成品】

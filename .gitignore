@@ -41,6 +41,16 @@ yarn-error.log*
 .eslintcache
 *.local
 
+# 【根目录不该出现 package-lock.json】
+# 真正的前端工程在 agent/frontend/，那里有自己的 package-lock。
+# 根目录出现 lock 只意味着一件事：某次 npm install / npm run build
+# 在根目录被误执行了（踩过：改启动脚本时 pushd 没生效，npm 在根目录跑）。
+# 这种文件进仓库会让人以为根目录是个 node 工程。
+# 注意只忽略根级那一个，agent/frontend/package-lock.json 必须照常入库。
+/package-lock.json
+/package.json
+/node_modules/
+
 # 【dist 这里要特殊说明】
 # 正常项目 dist 是构建产物，不该进仓库。
 # 但这个项目的后端把 frontend/dist 挂成静态目录，

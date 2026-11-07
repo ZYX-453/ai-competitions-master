@@ -111,21 +111,55 @@ export default function App() {
       if (p === 'attribution' && arg && /^\d+$/.test(arg)) setWeek(Number(arg))
     }
     window.addEventListener('hashchange', onHash)
+    /* 【首次进入时把 URL 上的 category 同步进 App state】
+       深链里有两种来源：看板自己写的 ?category=服饰，
+       和同事发来的整条链接。前者由 Dashboard 的 effect 维持，
+       后者此前会被漏掉 —— Dashboard 的 scope 从 URL 读到了服饰，
+       但 App 的 category 仍是空。于是从看板跳去"原因治理"页时
+       （onOpenCategory 之外的其他入口），目标页收到的是全店口径，
+       和刚才看的那一屏对不上。
+       这里做一次单向同步：URL → state。之后的双向同步由各自页面的
+       effect 负责，不会互相打架。 */
+    try {
+      const c = new URLSearchParams(window.location.search).get('category')
+      if (c) setCategory(c)
+    } catch {
+      /* 老浏览器或异常 URL 结构：忽略，退化成全店口径即可 */
+    }
     return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
   const go = useCallback((p: PageKey, arg?: string | number) => {
     const h = arg != null ? `#/${p}/${arg}` : `#/${p}`
-    if (window.location.hash === h) {
-      // 【hash 没变时手动触发一次状态更新】
-      // hashchange 事件不会因为"设了同样的值"而触发，
-      // 于是"在归因页点 W44，而当前已经在 #/attribution/44"会没有任何反应。
-      // 手动 set 一次，保证点击永远有反馈。
-      setPage(p)
-      if (p === 'attribution' && arg != null) setWeek(Number(arg))
-    } else {
-      window.location.hash = h
-    }
+    /* 【切换页面时清掉不属于该页的查询参数】
+       这里原本只改 hash，`?category=服饰` 会一直粘在地址栏上。
+       后果是打开归因页时 URL 长这样：
+         /?category=服饰#/attribution/44
+       但归因页根本不读 category —— 它按周诊断，没有"只看服饰"这个维度。
+       于是一个看起来"已按服饰筛选"的链接，实际展示的是全店数据。
+       这种"参数在场但无人消费"的 URL 比没有参数更坏：
+       分享出去，对方会以为自己看到的是服饰的数字。
+       现在离开看板就摘掉，看板自己会在需要时写回（见 Dashboard 的 effect）。
+
+       【为什么用 replaceState 一次写完，而不是先赋 hash 再改 search】
+       先赋 location.hash 会让浏览器立刻发起一次导航（触发 hashchange），
+       之后再 replaceState 会被当成又一次状态替换 —— 结果是
+       页面重渲染两遍、地址栏短暂闪一次旧 URL，而且非 replace 的
+       历史条目已经产生了。replaceState 一次性写好整条 URL 没有这个问题。
+       代价是不会触发 hashchange，所以下面要手动 setPage。 */
+    const sp = new URLSearchParams(window.location.search)
+    if (p !== 'dashboard') sp.delete('category')
+    if (p !== 'chat') sp.delete('q')
+    const qs = sp.toString()
+    const target = `${window.location.pathname}${qs ? `?${qs}` : ''}${h}`
+
+    const same = window.location.hash === h
+    window.history.replaceState(null, '', target)
+    setPage(p)
+    /* hash 没变时 hashchange 不会触发，但点击仍要有反馈 ——
+       setPage 是幂等的，重复设置没有副作用。 */
+    if (p === 'attribution' && arg != null) setWeek(Number(arg))
+    void same
   }, [])
 
   const openWeek = useCallback((w: number) => {

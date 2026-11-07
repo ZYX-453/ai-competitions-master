@@ -38,6 +38,16 @@ cd agent/backend && python main.py
 > 缺依赖会当场说"缺哪个、怎么装"，而不是等 uvicorn 抛一句 `ModuleNotFoundError`。
 > 端口被占也会直接报出来，可用 `PORT=8849 bash start.sh` 换端口。
 
+> ⚠️ **`jieba` 缺了不会让服务起不来，只会让「评论洞察」整页 500。**
+> 这是本项目最容易误判的一类故障：`/api/health` 200、看板、归因、预警策划、竞品雷达
+> 四个页面全部正常，只有评论洞察打不开，日志里是
+> `ModuleNotFoundError: No module named 'jieba'`（栈顶在 `review_analytics.tokenize`）。
+> 原因：分词只被词云和用户画像用到，而这两块只在评论洞察页出现；
+> warmup 里那句 `[warmup] 跳过（不影响服务）` 也是它 —— 注意"不影响服务"说的是
+> 服务本身，不是说所有页面都正常。
+>
+> 所以 `启动澄鉴.bat` 把 `jieba` 单独拎出来报，不和另外四个包混在一起说。
+
 > 后端同时托管 API 与前端静态产物，**单端口**即可访问完整应用，不需要开两个服务。
 
 > ⚠️ **Git Bash 里不要用 `set` 设 Key**。Bash 的 `set` 是设 shell 选项/位置参数，

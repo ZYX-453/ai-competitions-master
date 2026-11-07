@@ -1,58 +1,120 @@
 @echo off
-chcp 65001 >nul
 rem ===========================================================================
-rem  æ¾„é‰´ Â· ä¸€é”®å¯åŠ¨
+rem  ³Î¼ø ¡¤ Ò»¼üÆô¶¯£¨Windows Î¨Ò»Èë¿Ú£©
 rem
-rem  ã€ä¸ºä»€ä¹ˆä¸èƒ½å†™æ­» venv\Scripts\python.exeã€‘
-rem  æ—§ç‰ˆç¬¬ 5 è¡Œæ˜¯ "%~dp0venv\Scripts\python.exe"ã€‚è¿™ä¸ª venv ä»Žæ¥æ²¡è¢«åˆ›å»ºè¿‡ï¼Œ
-rem  åŒå‡»çš„ç»“æžœæ˜¯é—ªä¸€ä¸‹å°±é€€ â€”â€” çª—å£é‡Œåªæœ‰ä¸€è¡Œ"ç³»ç»Ÿæ‰¾ä¸åˆ°æŒ‡å®šçš„è·¯å¾„"ï¼Œ
-rem  ç”¨æˆ·çœ‹åˆ°çš„çŽ°è±¡æ˜¯"ç‚¹äº†æ²¡ååº”"ï¼Œè€ŒçœŸæ­£åŽŸå› è—åœ¨è¢«åžæŽ‰çš„é”™è¯¯é‡Œã€‚
-rem  è¿™é‡ŒæŒ‰ä¼˜å…ˆçº§æ‰¾ä¸€ä¸ªçœŸèƒ½ç”¨çš„è§£é‡Šå™¨ï¼Œå¹¶ä¸”æŠŠç”¨çš„æ˜¯å“ªä¸€ä¸ªæ‰“å°å‡ºæ¥ï¼Œ
-rem  ä¸‹æ¬¡å†å‡ºé—®é¢˜ï¼Œçœ‹çª—å£ç¬¬ä¸€è¡Œå°±çŸ¥é“å®ƒé€‰äº†è°ã€‚
+rem  ¡¾ÎªÊ²Ã´Ö»±£ÁôÕâÒ»¸ö .bat¡¿
+rem  ÀúÊ·ÉÏ²¢´æÈý¸öÈë¿Ú£º¸ùÄ¿Â¼µÄ¡¸Æô¶¯³Î¼ø.bat¡¹¡¢agent\start.bat¡¢agent\start.sh¡£
+rem  Èý·ÝÂß¼­¸÷²»ÏàÍ¬£¬ÓÚÊÇÍ¬Ò»¸öÎÊÌâÔÚÈý´¦µÄ±íÏÖÒ²²»Ò»Ñù£º
+rem    ¡¤ agent\start.bat ÊÇ GBK ±àÂëÇÒÃ»ÓÐ chcp£¬ÔÚ UTF-8 ÖÕ¶ËÀïÈ«ÊÇÂÒÂë£¬
+rem      ¶øËüÇ¡ºÃÊÇ README ÈÃÓÃ»§Ë«»÷µÄÄÇ¸ö£»
+rem    ¡¤ ¸ùÄ¿Â¼Õâ¸ö±àÂëÊÇ¶ÔµÄ¡¢»á²é¶Ë¿Ú¡¢»á´òÓ¡½âÊÍÆ÷£¬µ«²»¹¹½¨Ç°¶Ë£¬
+rem      ÄÃµ½¸É¾»²Ö¿âË«»÷µÄ½á¹ûÊÇ"ÄÜ¿ªµ«Ò³Ãæ°×ÆÁ"£»
+rem    ¡¤ start.sh Ö»·þÎñ bash »·¾³¡£
+rem  ÏÖÔÚ°Ñ .bat ÊÕ³ÉÒ»·Ý£ºÒÔ¸ùÄ¿Â¼Õâ·ÝÎª»ù´¡£¨Ëü×îÍêÕû£©£¬²¹ÉÏÇ°¶Ë¹¹½¨Óë
+rem  ÒÀÀµÕï¶Ï¡£agent\start.bat ¸ÄÎª×ª·¢µ½ÕâÀï£¬±ÜÃâÁ½·ÝÂß¼­ÔÙ´ÎÆ¯ÒÆ¡£
+rem
+rem  ¡¾ÎªÊ²Ã´²»ÄÜÐ´ËÀ venv\Scripts\python.exe¡¿
+rem  ¾É°æµÚ 5 ÐÐÊÇ "%~dp0venv\Scripts\python.exe"¡£Õâ¸ö venv ´ÓÀ´Ã»±»´´½¨¹ý£¬
+rem  Ë«»÷µÄ½á¹ûÊÇÉÁÒ»ÏÂ¾ÍÍË ¡ª¡ª ´°¿ÚÀïÖ»ÓÐÒ»ÐÐ"ÏµÍ³ÕÒ²»µ½Ö¸¶¨µÄÂ·¾¶"£¬
+rem  ÓÃ»§¿´µ½µÄÏÖÏóÊÇ"µãÁËÃ»·´Ó¦"£¬¶øÕæÕýÔ­Òò²ØÔÚ±»ÍÌµôµÄ´íÎóÀï¡£
+rem  ÕâÀï°´ÓÅÏÈ¼¶ÕÒÒ»¸öÕæÄÜÓÃµÄ½âÊÍÆ÷£¬²¢ÇÒ°ÑÓÃµÄÊÇÄÄÒ»¸ö´òÓ¡³öÀ´£¬
+rem  ÏÂ´ÎÔÙ³öÎÊÌâ£¬¿´´°¿ÚµÚÒ»ÐÐ¾ÍÖªµÀËüÑ¡ÁËË­¡£
+rem
+rem  ¡¾±¾ÎÄ¼þ±ØÐë´æÎª GBK + CRLF£¬ÇÒ²»Òª¼Ó chcp 65001¡¿
+rem  ÕâÒ»Ìõ²È¹ý£¬½áÂÛºÍÖ±¾õÏà·´£º
+rem  cmd.exe ½âÎö .bat Ê±ÓÃµÄÊÇ**´ò¿ªÎÄ¼þÄÇÒ»¿ÌµÄ OEM ´úÂëÒ³**£¨ÖÐÎÄÏµÍ³Îª 936/GBK£©£¬
+rem  ¶ø²»ÊÇ chcp Ö®ºóÉèµÄÄÇ¸ö¡£ÓÚÊÇ UTF-8 ´æµÄÖÐÎÄ×¢ÊÍ»á±»°´ GBK Öð×Ö½ÚÇÐ¿ª£¬
+rem  rem ÐÐÒâÍâ"±ÕºÏ"£¬ºóÃæ°ë¾ä±ä³ÉÒ»Ìõ¶ÀÁ¢ÃüÁîÈ¥Ö´ÐÐ ¡ª¡ª
+rem  ±¨Ò»¶Ñ "'xx' is not recognized as an internal or external command"£¬
+rem  ¶øÇÒ½Å±¾**ÕÕÑù°Ñ·þÎñÆðÆðÀ´**£¬ÌØ±ðÄÑ¶ÔÉÏÒò¹û¡£
+rem  ËùÒÔ£ºÎÄ¼þ´æ GBK£¬È¥µô chcp¡£´°ÌåÀïÏÔÊ¾ÖÐÎÄ¿¿ÏµÍ³Ä¬ÈÏ´úÂëÒ³£¬±¾À´¾ÍÊÇ¶ÔµÄ¡£
 rem ===========================================================================
 setlocal
 
 set "PORT=8848"
+rem ¡¾%~dp0 ×Ô´øÎ²²¿·´Ð±¸Ü¡¿ËùÒÔºóÃæÍ³Ò»Ð´ %ROOT%agent\... £¬²»ÄÜÔÙ²¹Ò»¸ö \
+set "ROOT=%~dp0"
 set "PY="
 
-rem â‘  é¡¹ç›®è‡ªå¸¦çš„ venvï¼ˆå¦‚æžœå“ªå¤©çœŸçš„å»ºäº†ï¼Œä¼˜å…ˆç”¨å®ƒï¼Œä¾èµ–éš”ç¦»æœ€å¹²å‡€ï¼‰
-if exist "%~dp0venv\Scripts\python.exe" set "PY=%~dp0venv\Scripts\python.exe"
+rem ¢Ù ÏîÄ¿×Ô´øµÄ venv£¨Èç¹ûÄÄÌìÕæµÄ½¨ÁË£¬ÓÅÏÈÓÃËü£¬ÒÀÀµ¸ôÀë×î¸É¾»£©
+if exist "%ROOT%venv\Scripts\python.exe" set "PY=%ROOT%venv\Scripts\python.exe"
 
-rem â‘¡ æœ¬æœº WorkBuddy çš„é»˜è®¤çŽ¯å¢ƒï¼ˆå½“å‰å®žé™…åœ¨ç”¨çš„é‚£ä¸ªï¼Œfastapi/pandas/jieba éƒ½é½ï¼‰
+rem ¢Ú ±¾»ú WorkBuddy µÄÄ¬ÈÏ»·¾³£¨µ±Ç°Êµ¼ÊÔÚÓÃµÄÄÇ¸ö£¬fastapi/pandas/jieba ¶¼Æë£©
 if not defined PY if exist "%USERPROFILE%\.workbuddy\binaries\python\envs\default\Scripts\python.exe" set "PY=%USERPROFILE%\.workbuddy\binaries\python\envs\default\Scripts\python.exe"
 
-rem â‘¢ ç³»ç»Ÿ Python 3.11ï¼ˆè£…äº† fastapiï¼Œä½†å¯èƒ½ç¼º jiebaï¼‰
+rem ¢Û ÏµÍ³ Python 3.11
 if not defined PY if exist "%ProgramFiles%\Python311\python.exe" set "PY=%ProgramFiles%\Python311\python.exe"
 
-rem â‘£ æœ€åŽäº¤ç»™ PATH é‡Œçš„ python
+rem ¢Ü ×îºó½»¸ø PATH ÀïµÄ python
 if not defined PY set "PY=python"
 
 echo.
-echo   æ¾„é‰´ Â· å½’å› è¯Šæ–­ Agent
-echo   è§£é‡Šå™¨ï¼š%PY%
-echo   ç«¯å£ï¼š  http://127.0.0.1:%PORT%
+echo   ³Î¼ø ¡¤ ¹éÒòÕï¶Ï Agent
+echo   ½âÊÍÆ÷£º%PY%
+echo   ¶Ë¿Ú£º  http://127.0.0.1:%PORT%
 echo.
 
-rem ã€å…ˆæŽ¢ä¸€ä¸‹ä¾èµ–ï¼Œç¼ºä»€ä¹ˆå½“åœºè¯´æ¸…æ¥šã€‘
-"%PY%" -c "import fastapi,uvicorn,pandas,numpy,jieba" 2>nul
+rem ---------- 1. ÒÀÀµ×Ô¼ì ----------
+rem ¡¾jieba µ¥¶À±¨£¬²»Òª»ìÔÚÎå¸ö°üÀïÒ»ÆðËµ¡¿
+rem ËüÊÇÎ¨Ò»Ò»¸ö"È±ÁË²»»áÈÃ·þÎñÆð²»À´¡¢Ö»»áÈÃÆÀÂÛ¶´²ìÕûÒ³ 500"µÄÒÀÀµ¡£
+rem »ìÔÚÍ¨ÓÃÌáÊ¾Àï£¬ÓÃ»§»áÒÔÎª¸ú×Ô¼ºÎÞ¹Ø£¨±Ï¾¹·þÎñÈ·ÊµÆðÀ´ÁË£©¡£
+"%PY%" -c "import fastapi,uvicorn,pandas,numpy" 2>nul
 if errorlevel 1 (
-  echo   [!] è¿™ä¸ªè§£é‡Šå™¨ç¼ºä¾èµ–ï¼Œéœ€è¦çš„äº”ä¸ªåŒ…ï¼š
-  echo       fastapi uvicorn pandas numpy jieba
+  echo   [x] Õâ¸ö½âÊÍÆ÷È±ºËÐÄÒÀÀµ£¬ÐèÒª£ºfastapi uvicorn pandas numpy
   echo.
-  echo   è£…æ³•ï¼š
-  echo       "%PY%" -m pip install -r "%~dp0requirements.txt"
+  echo   ×°·¨£º
+  echo       "%PY%" -m pip install -r "%ROOT%requirements.txt"
   echo.
   pause
   exit /b 1
 )
+"%PY%" -c "import jieba" 2>nul
+if errorlevel 1 (
+  echo   [!] È± jieba ¡ª¡ª ·þÎñÄÜÆðÀ´£¬µ«¡¸ÆÀÂÛ¶´²ì¡¹Ò³»áÕûÒ³±¨´í 500¡£
+  echo       ·Ö´Ê¡¢´ÊÔÆ¡¢ÓÃ»§»­ÏñÈ«²¿ÒÀÀµËü¡£
+  echo.
+  echo       ×°·¨£º
+  echo         "%PY%" -m pip install -r "%ROOT%requirements.txt"
+  echo       »òµ¥¶À×°£º
+  echo         "%PY%" -m pip install jieba
+  echo.
+  echo       ÏÖÔÚ¼ÌÐøÆô¶¯£¬Ö»ÊÇÆÀÂÛ¶´²ìÒ³²»¿ÉÓÃ¡£
+  echo.
+)
 
-cd /d "%~dp0agent\backend"
+rem ---------- 2. Ç°¶Ë²úÎï ----------
+if not exist "%ROOT%agent\frontend\dist\index.html" (
+  echo   [2/3] Î´·¢ÏÖÇ°¶Ë²úÎï£¬¿ªÊ¼¹¹½¨£¨Ê×´ÎÔ¼ 1-2 ·ÖÖÓ£©...
+  if not exist "%ROOT%agent\frontend\node_modules" (
+    echo         ÏÈ×°Ç°¶ËÒÀÀµ...
+    pushd "%ROOT%agent\frontend"
+    call npm install --silent
+    popd
+  )
+  pushd "%ROOT%agent\frontend"
+  call npm run build
+  popd
+  if not exist "%ROOT%agent\frontend\dist\index.html" (
+    echo   [x] Ç°¶Ë¹¹½¨Ê§°Ü¡£¿´ÉÏÃæ npm µÄÊä³ö¡£
+    echo       Ã»ÓÐ node/npm£¿×°Ò»¸ö LTS °æÔÙË«»÷±¾ÎÄ¼þ£º
+    echo         https://nodejs.org/zh-cn
+    pause
+    exit /b 1
+  )
+  echo   [2/3] Ç°¶Ë¹¹½¨Íê³É
+) else (
+  echo   [2/3] Ç°¶Ë²úÎïÒÑ¾ÍÐ÷
+)
 
-rem ã€ç«¯å£è¢«å ç”¨æ—¶ä¸è¦é™é»˜å¤±è´¥ã€‘
+cd /d "%ROOT%agent\backend"
+
+rem ---------- 3. ¶Ë¿Ú¼ì²é ----------
+rem ¡¾¶Ë¿Ú±»Õ¼ÓÃÊ±²»Òª¾²Ä¬Ê§°Ü¡¿
+rem Ò²Ë³ÊÖ°ÑÒ³Ãæ´ò¿ª ¡ª¡ª ¶à°ëÊÇÉÏÒ»´ÎµÄ´°¿Ú»¹ÔÚÅÜ£¬ÓÃ»§ÆäÊµÖ»Ïë¿´¿´¡£
 netstat -ano | findstr ":%PORT% " | findstr LISTENING >nul
 if not errorlevel 1 (
-  echo   [!] ç«¯å£ %PORT% å·²è¢«å ç”¨ â€”â€” å¯èƒ½å·²ç»åœ¨å¦ä¸€ä¸ªçª—å£è·‘ç€äº†ã€‚
-  echo       ç›´æŽ¥æ‰“å¼€é¡µé¢çœ‹çœ‹ï¼š
+  echo   [!] ¶Ë¿Ú %PORT% ÒÑ±»Õ¼ÓÃ ¡ª¡ª ¿ÉÄÜÒÑ¾­ÔÚÁíÒ»¸ö´°¿ÚÅÜ×ÅÁË¡£
+  echo       Ö±½Ó´ò¿ªÒ³Ãæ¿´¿´£º
   echo.
   start "" "http://127.0.0.1:%PORT%"
   echo.
@@ -60,10 +122,12 @@ if not errorlevel 1 (
   exit /b 0
 )
 
+echo   [3/3] Æô¶¯·þÎñ...
+echo.
 start "" "http://127.0.0.1:%PORT%"
 "%PY%" -W ignore -m uvicorn main:app --host 127.0.0.1 --port %PORT%
 
-rem èµ°åˆ°è¿™é‡Œè¯´æ˜Ž uvicorn é€€å‡ºäº†ã€‚æŒ‰ä»»æ„é”®å…³çª—å£ï¼Œä¸ç„¶æŠ¥é”™ä¸€é—ªè€Œè¿‡ã€‚
+rem ×ßµ½ÕâÀïËµÃ÷ uvicorn ÍË³öÁË¡£°´ÈÎÒâ¼ü¹Ø´°¿Ú£¬²»È»±¨´íÒ»ÉÁ¶ø¹ý¡£
 echo.
-echo   æœåŠ¡å·²åœæ­¢ã€‚ä¸Šé¢æ˜¯æœ€åŽçš„è¾“å‡ºã€‚
+echo   ·þÎñÒÑÍ£Ö¹¡£ÉÏÃæÊÇ×îºóµÄÊä³ö¡£
 pause

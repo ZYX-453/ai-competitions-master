@@ -16,8 +16,8 @@
  * 四条线叠在一个多边形里，读者只能看出"谁包住了谁"，
  * 看不出具体差几个点，也排不了序。而这一页要回答的正是"差在哪、差多少"。
  * =========================================================================== */
-import { useEffect, useState } from 'react'
-import { getJson } from '../lib/sse'
+import { useState } from 'react'
+import { useFetch } from '../lib/useFetch'
 import type { CompetitorData } from '../lib/pages'
 import { Card, Stat, Bar, Empty, Loading, Fail, nf, pp } from '../components/PageKit'
 import { useTip } from '../components/BiKit'
@@ -30,27 +30,22 @@ export function Competitors({
   category: string
   setCategory: (c: string) => void
 }) {
-  const [d, setD] = useState<CompetitorData | null>(null)
-  const [err, setErr] = useState('')
-  const [tick, setTick] = useState(0)
-  /* 【所有 hooks 必须在提前 return 之前】
-     下面有 `if (err) return` / `if (!d) return` 两个提前出口。
-     第一版把 sel / useTip 放在它们之后：加载态渲染 3 个 hook、
-     加载完渲染 6 个 —— React #310（hook 数量前后不一致）当场白屏。
-     规则：hooks 全部置顶，与数据的派生计算留在出口之后。 */
   const [sel, setSel] = useState<string | null>(null)
   const tip1 = useTip()
   const tip3 = useTip()
 
-  useEffect(() => {
-    setErr('')
-    const q = category ? `?category=${encodeURIComponent(category)}` : ''
-    getJson<CompetitorData>(`/api/pages/competitors${q}`)
-      .then(setD)
-      .catch((e) => setErr(String(e)))
-  }, [category, tick])
+  /* 【这一页的竞态和别处不同：切类目会换掉整张表】
+     连点「服饰 → 生鲜 → 数码」时，若「服饰」的响应最后到，
+     屏幕上就是**服饰的竞品数据配着「数码」的筛选高亮** ——
+     而且矩阵里那 6 个维度仍然是服饰的，不会报任何错。
+     统一走 useFetch 之后靠请求序号保证"只认最后一次"。 */
+  const {
+    data: d, err, retry,
+  } = useFetch<CompetitorData>(
+    `/api/pages/competitors${category ? `?category=${encodeURIComponent(category)}` : ''}`,
+  )
 
-  if (err) return <Fail msg={err} onRetry={() => setTick((x) => x + 1)} />
+  if (err) return <Fail msg={err} onRetry={retry} />
   if (!d) return <Loading label="对齐 5 家语料" />
 
   const us = d.entities.find((e) => e.entity.startsWith('本店'))

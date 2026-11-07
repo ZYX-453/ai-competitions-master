@@ -17,7 +17,7 @@
  * 不能放到页面底部的"已知局限"里（那里用户不看）。
  * =========================================================================== */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getJson } from '../lib/sse'
+import { useFetch } from '../lib/useFetch'
 import type { ReviewData } from '../lib/pages'
 import { Card, Stat, Bar, Empty, Loading, Fail, nf, pp } from '../components/PageKit'
 import { HBars, Segmented, useTip } from '../components/BiKit'
@@ -30,9 +30,6 @@ export function Reviews({
   entity: string
   setEntity: (e: string) => void
 }) {
-  const [d, setD] = useState<ReviewData | null>(null)
-  const [err, setErr] = useState('')
-  const [tick, setTick] = useState(0)
   const [wcMode, setWcMode] = useState<'neg' | 'all'>('neg')
   // 【默认只显示前 12 个】
   // 40 个词每个挂一句原话时，这一块单独占了页面 3000px（整页 3659px）——
@@ -40,14 +37,11 @@ export function Reviews({
   // 12 个足够看清"抱怨集中在哪"，剩下的按需展开。
   const [wcTop, setWcTop] = useState<'12' | '24' | 'all'>('12')
 
-  useEffect(() => {
-    setErr('')
-    getJson<ReviewData>(`/api/pages/reviews?entity=${encodeURIComponent(entity)}`)
-      .then(setD)
-      .catch((e) => setErr(String(e)))
-  }, [entity, tick])
+  const { data: d, err, retry } = useFetch<ReviewData>(
+    `/api/pages/reviews?entity=${encodeURIComponent(entity)}`,
+  )
 
-  if (err) return <Fail msg={err} onRetry={() => setTick((x) => x + 1)} />
+  if (err) return <Fail msg={err} onRetry={retry} />
   if (!d) return <Loading label={`读 ${entity} 的评论`} />
 
   const s = d.sentiment

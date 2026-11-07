@@ -28,7 +28,7 @@
  * =========================================================================== */
 import { useEffect, useState } from 'react'
 import type { KeyboardEvent } from 'react'
-import { getJson } from '../lib/sse'
+import { useFetch } from '../lib/useFetch'
 import type { PlanData, PlanTrendPoint } from '../lib/pages'
 import { Card, Stat, Empty, Loading, Fail, nf, money, pp } from '../components/PageKit'
 import { Segmented, HBars, useTip } from '../components/BiKit'
@@ -185,9 +185,6 @@ export function Plan({
   category: string
   setCategory: (c: string) => void
 }) {
-  const [d, setD] = useState<PlanData | null>(null)
-  const [err, setErr] = useState('')
-  const [tick, setTick] = useState(0)
   /* 【选中的周必须记清"是在哪个范围里选的"】
      只存一个裸周号会出这种事：在「全部类目」停在第 44 周，切到「个护」——
      个护只有第 48 周异常，但请求仍带着 week=44，后端照 44 返回，
@@ -202,20 +199,19 @@ export function Plan({
   const { show, hide, el } = useTip()
   const week = sel && sel.cat === category ? sel.wk : null
 
-  useEffect(() => {
-    let live = true
-    setErr('')
-    const q = new URLSearchParams()
-    if (category) q.set('category', category)
-    if (week != null) q.set('week', String(week))
-    const qs = q.toString()
-    getJson<PlanData>(`/api/pages/plan${qs ? `?${qs}` : ''}`)
-      .then((x) => { if (live) setD(x) })
-      .catch((e) => { if (live) setErr(String(e)) })
-    return () => { live = false }
-  }, [category, week, tick])
+  /* 【week 为 null 时也要发请求，让后端挑默认周】
+     这里不能像其它页那样在 url 为 null 时跳过 —— 首次进入时 sel 是 null，
+     而"该看哪一周"正是后端最清楚的事（它用和判定同一套 _diagnose 选）。
+     所以 url 永远非空，只是拼接的参数不同。 */
+  const q = new URLSearchParams()
+  if (category) q.set('category', category)
+  if (week != null) q.set('week', String(week))
+  const qs = q.toString()
+  const { data: d, err, retry } = useFetch<PlanData>(
+    `/api/pages/plan${qs ? `?${qs}` : ''}`,
+  )
 
-  if (err) return <Fail msg={err} onRetry={() => setTick((x) => x + 1)} />
+  if (err) return <Fail msg={err} onRetry={retry} />
   if (!d) return <Loading label="汇总 52 周的异常判定" />
 
   const h = d.headline

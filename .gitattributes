@@ -1,0 +1,53 @@
+# ===========================================================================
+# 换行符与编码约定
+#
+# 【为什么需要这个文件】
+# Windows 上 cmd.exe 解析 .bat 时，行尾必须是 CRLF。而本仓库的工作副本
+# 处于 core.autocrlf=true 的状态，git 入库时会把 CRLF 统一转成 LF——
+# 于是仓库里存的 bat 其实是 LF，只有**在这台机器上 checkout 出来**
+# 才会被转回 CRLF。换一台 autocrlf=false 的机器 clone，拿到的是 LF 的 bat，
+# 双击就会出现行尾粘连、命令被拼在一起的怪现象。
+#
+# 实测过：改 .bat 时只要经过一次 Python 文本模式读写（会把 \r\n 规范化成 \n）
+# 文件就坏掉，cmd 报一堆 "'xx' 不是内部或外部命令"，但服务照样起得来，
+# 因果极难对上。这里用 git 层面的规则把它钉死，不再依赖每台机器的配置。
+# ===========================================================================
+
+# ---- 批处理：必须 CRLF，且保持原编码（GBK，不要转 UTF-8）----
+# 为什么是 GBK：cmd.exe 解析 bat 用的是**打开文件那一刻的 OEM 代码页**
+# （中文系统 936/GBK），不是 chcp 之后设的那个。存 UTF-8 会让中文注释
+# 被按 GBK 逐字节切开，rem 行意外闭合、后半句变成命令去执行。
+*.bat   text eol=crlf
+*.cmd   text eol=crlf
+
+# ---- Shell 脚本：必须 LF，否则 WSL/macOS 会报 bad interpreter ----
+*.sh    text eol=lf
+
+# ---- 源码与文档：LF ----
+*.ts    text eol=lf
+*.tsx   text eol=lf
+*.js    text eol=lf
+*.cjs   text eol=lf
+*.css   text eol=lf
+*.json  text eol=lf
+*.md    text eol=lf
+*.py    text eol=lf
+*.html  text eol=lf
+.gitignore      text eol=lf
+.gitattributes  text eol=lf
+
+# ---- 二进制：不做任何换行或编码转换 ----
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.webp  binary
+*.ico   binary
+*.pdf   binary
+*.zip   binary
+*.gz    binary
+*.mp4   binary
+*.woff  binary
+*.woff2 binary
+*.ttf   binary
+*.eot   binary

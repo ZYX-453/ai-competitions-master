@@ -1,71 +1,18 @@
 @echo off
-setlocal
+rem ===========================================================================
+rem  agent\start.bat —— 转发到根目录的唯一入口
+rem
+rem  【为什么这里只剩一行 call】
+rem  这里原本有一份完整的启动逻辑，和根目录的「启动澄鉴.bat」并存。
+rem  两份逻辑各自演进，于是出现了三种不一致：
+rem    · 本文件是 GBK 编码、没有 chcp，在 UTF-8 终端里中文全是乱码，
+rem      而 README 偏偏让 Windows 用户双击这个；
+rem    · 本文件不查端口占用，端口被占时直接抛一串 uvicorn 报错；
+rem    · 本文件不检查 jieba，而缺 jieba 只会让评论洞察页 500，
+rem      表现是"服务好好的、有一页打不开"，最难自己想到的一类故障。
+rem  与其维护两份，不如让两个入口指向同一段逻辑。真正的内容在
+rem  ..\启动澄鉴.bat 里，那边有完整注释。
+rem ===========================================================================
 
-REM ===================================================================
-REM  差评炼金炉 · 一键启动
-REM
-REM  设计取舍：
-REM  1) 不用 PowerShell 写启动逻辑 —— 执行策略不一定允许，双击容易报错。
-REM     .bat 是最保守的选择，任何 Windows 都能跑。
-REM  2) 先构建前端再启后端：后端把 frontend/dist 挂成静态目录，
-REM     只启后端就是完整单端口应用，不需要同时开两个服务。
-REM  3) 本文件必须以 GBK + CRLF 保存，否则中文会被 cmd 当成命令执行。
-REM     修改后用 _to_gbk.py 重新转码。
-REM ===================================================================
-
-cd /d "%~dp0"
-
-echo.
-echo   ============================================
-echo    差评炼金炉 · 归因诊断 Agent
-echo   ============================================
-echo.
-
-REM ---------- 1. 定位 Python ----------
-set "PY="
-if exist "C:\Program Files\Python311\python.exe" set "PY=C:\Program Files\Python311\python.exe"
-if not defined PY (
-  where python >nul 2>nul
-  if not errorlevel 1 set "PY=python"
-)
-if not defined PY (
-  echo   [x] 没找到 Python 3.11+
-  echo       请安装后重试，或手动修改本文件中的 PY 变量。
-  pause
-  exit /b 1
-)
-echo   [1/3] Python: %PY%
-
-REM ---------- 2. 前端产物 ----------
-if not exist "frontend\dist\index.html" (
-  echo   [2/3] 未发现前端产物，开始构建...
-  if not exist "frontend\node_modules" (
-    echo         首次运行需安装依赖，约 1-2 分钟
-    pushd frontend
-    call npm install --silent
-    popd
-  )
-  pushd frontend
-  call npm run build
-  popd
-  if not exist "frontend\dist\index.html" (
-    echo   [x] 前端构建失败
-    pause
-    exit /b 1
-  )
-) else (
-  echo   [2/3] 前端产物已就绪
-)
-
-REM ---------- 3. 启动 ----------
-echo   [3/3] 启动服务...
-echo.
-echo   访问地址:  http://127.0.0.1:8848
-echo   停用服务:  关闭本窗口，或按 Ctrl+C
-echo.
-
-cd backend
-"%PY%" -m uvicorn main:app --host 127.0.0.1 --port 8848
-
-endlocal
-pause
+call "%~dp0..\启动澄鉴.bat"
+exit /b %errorlevel%
