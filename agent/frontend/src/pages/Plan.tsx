@@ -295,7 +295,7 @@ export function Plan({
       </div>
 
       <Card
-        title="哪几周需要解释"
+        title="待解释周次预警"
         note={
           <>
             按 <b>超出基线的百分点</b> 排序，不按 z 值 —— z 会随样本量放大，
@@ -353,7 +353,7 @@ export function Plan({
 
       <div className="pg-2col is-fill">
         <Card
-          title="这一周是谁推上去的"
+          title="当周异动贡献拆解"
           note={<>按「类目占比 × 与自身基线的差距」拆开。<b>点一行进入该类目</b>，周次按新范围重选。</>}
         >
           {d.contributions.length ? (

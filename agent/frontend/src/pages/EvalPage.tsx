@@ -127,7 +127,7 @@ export function EvalPage() {
       })}
 
       <div className="pg-2col">
-        <Card title="数据规模快照" note={<>上面那些断言，就是在这么多数据上跑的。</>} pad={false}>
+        <Card title="数据规模快照" note={<>上述断言均在以下数据规模上执行。</>} pad={false}>
           <div className="pg-scale">
             {scaleItems.filter((x) => scale[x.k] != null).map((x) => (
               <div className="pg-scale-row" key={x.k}>

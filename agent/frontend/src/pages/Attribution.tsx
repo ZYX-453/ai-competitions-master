@@ -293,7 +293,7 @@ export function Attribution({
 
       {/* ---- ② 涨在哪 ---- */}
       <Card
-        title="涨在哪：类目贡献度"
+        title="类目贡献度分解"
         note={<>
           贡献 = 该类目相对基准的差距 × 它占当周订单的比重。
           {catView === 'waterfall' && ' 瀑布图里每一节相加 = 最右边那根总柱，' }
@@ -546,7 +546,7 @@ export function Attribution({
       {/* ---- ③ 卖的东西变了吗 ---- */}
       {d.structure && (
         <Card
-          title="卖的东西变了吗：原因构成对比"
+          title="退货原因构成对比"
           note={<>
             本周 vs {d.structure.baseline_scope}。
             {stView === 'shift' && <><b>份额变化</b>接近 0 说明"没换货"，那这周的涨幅就不是选品造成的。</>}
@@ -896,8 +896,8 @@ export function Attribution({
           放在"这一周为什么涨"的标题下而不加这个条件，非促销周也会被解释成促销导致的。 */}
       {d.promo && d.promo.is_promo_week && (
         <Card
-          title="是不是促销本身导致的"
-          note={<>把涨幅拆成<b>结构效应</b>（卖的东西变了）和<b>机制效应</b>（同样的东西变了）。配对检验比的是同一批 SKU 自己。这里是{d.promo.promo_weeks.length > 1 ? `${d.promo.promo_weeks.length} 次` : ''}促销周的<b>合并结论</b>，不是单看第 {d.week} 周。</>}
+          title="促销机制效应检验"
+          note={<>将变动分解为<b>结构效应</b>（品类构成变化）与<b>机制效应</b>（同品类内部变化）。配对检验的对照基准是同一批 SKU。此处为{d.promo.promo_weeks.length > 1 ? `${d.promo.promo_weeks.length} 次` : ''}促销周的<b>合并结论</b>，非单周结果（第 {d.week} 周）。</>}
         >
           {/* 【三个数并列，不做堆叠条 —— 这里原来摆了个说不通的等式】
               过去是一条"结构 + 机制"的堆叠条，右边标"合计 3.28pp"。

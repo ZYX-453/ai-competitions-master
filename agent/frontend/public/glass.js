@@ -1231,20 +1231,38 @@
     const group = numStr.includes(',');
     el.dataset.gcu = el.textContent;   /* 签名 = 最终全文，滚完后与之相等即跳过 */
     el.dataset.gcuRun = '1';           /* 动画锁：中途扫描不重启 */
+
+    /* 【不可见时直接落定最终值，绝不留在 0】
+       rAF 在三种情况下会被节流或完全不触发：后台标签页、
+       prefers-reduced-motion、以及无头浏览器截图。
+       而 step(0) 的第一次调用把 k 算成 0，会立刻把数字写成 "0.00"。
+       两者一叠加，用户切走再切回来就看到「退货率 0.00%、订单 0 单」——
+       一个纯粹的显示层假象，却比"没有数据"更误导：它看起来像一个
+       干净得反常的经营周。所以先判断可见性，不可见就直接写终值。 */
+    const settle = () => {
+      tn.textContent = numStr + suffix;
+      el.classList.add('gcu-done');
+      delete el.dataset.gcuRun;
+    };
+    if (document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      settle(); return;
+    }
+
     const fmt = (v) => {
       const s = dec ? v.toFixed(dec) : String(Math.round(v));
       return group ? s.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : s;
     };
     const t0 = performance.now() + 200 + idx * STAG;
+    /* 【留一条兜底：动画没跑完就把最终值写回去】
+       即使可见，rAF 也可能因为主线程被长任务占满而长时间不回调
+       （本项目首屏要拉 30~50KB JSON 并渲染 SVG）。
+       1.6 × DUR 之后无条件落定，宁可少一段动画，也不要一个错的 0。 */
+    const guard = setTimeout(settle, DUR * 1.6 + 400 + idx * STAG);
     (function step(now) {
       const k = Math.min(1, Math.max(0, ((now || 0) - t0) / DUR));
       tn.textContent = fmt(Math.max(0, target * ease(k))) + suffix;
       if (k < 1) requestAnimationFrame(step);
-      else {
-        tn.textContent = numStr + suffix;
-        el.classList.add('gcu-done');
-        delete el.dataset.gcuRun;
-      }
+      else { clearTimeout(guard); settle(); }
     })(0);
   }
 
@@ -1293,14 +1311,21 @@
       return group ? s.replace(/\B(?=(\d{3})+(?!\d))/g, ',') : s;
     };
     const t0 = performance.now() + 60 + idx * STAG;
+    /* 同 countUp：不可见 / 降动效 时不跑动画，直接落定终值，
+       否则会停在 0（= 一个假的"这一项是 0"）。 */
+    const settle = () => {
+      tn.textContent = pre + numStr + suf;
+      delete el.dataset.gcbRun;
+    };
+    if (document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      settle(); return;
+    }
+    const guard = setTimeout(settle, DUR * 1.6 + 400 + idx * STAG);
     (function step(now) {
       const k = Math.min(1, Math.max(0, ((now || 0) - t0) / DUR));
       tn.textContent = pre + fmt(target * ease(k)) + suf;
       if (k < 1) requestAnimationFrame(step);
-      else {
-        tn.textContent = pre + numStr + suf;
-        delete el.dataset.gcbRun;
-      }
+      else { clearTimeout(guard); settle(); }
     })(0);
   }
 

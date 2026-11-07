@@ -348,7 +348,7 @@ export function Competitors({
       </Card>
 
       <Card
-        title="维度差距：差在哪"
+        title="维度差距归因"
         note={<>每个维度先筛出<b>提到该维度</b>的评论，再看其中的负评率。分母是提及数，不是总评论数。</>}
         pad={false}
       >
@@ -432,7 +432,7 @@ export function Competitors({
           一个"为什么没有"比一个消失的模块有用得多。 */}
       {d.contrast?.ok ? (
         <Card
-          title="我们在说什么，他们在说什么"
+          title="本店与对标竞品的特征词差异"
           note={<>
             左右并排而不是只列「本店独有词」：<b>独有</b>可能只是选品不同，不是经营差异。
             数值是 log₂(本侧占比 / 对侧占比)，正数越大说明这个词越偏向本侧。
@@ -474,7 +474,7 @@ export function Competitors({
           </div>
         </Card>
       ) : (
-        <Card title="我们在说什么，他们在说什么">
+        <Card title="本店与对标竞品的特征词差异">
           <Empty what={d.contrast?.reason || '这一组对比没有可用的特征词'} />
         </Card>
       )}

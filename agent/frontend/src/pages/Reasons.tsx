@@ -208,15 +208,15 @@ export function Reasons({
           sub={`平均每条 ¥${(d.total_loss / Math.max(d.total_returns, 1)).toFixed(0)}`} />
         <Stat label="其中可挽回" value={rc.v} unit={rc.u} tone="good"
           sub={`占损失 ${d.recoverable_pct.toFixed(1)}%`}
-          title="按各原因的 is_resellable 占比折算。这是账面口径，不等于「这批货真的还能卖」。" />
+          title="按各原因的 is_resellable 占比折算。这是账面口径，不代表商品实际可二次销售。" />
         <Stat label="损失最大的原因" value={top?.l2 ?? '—'}
           sub={top ? `${money(top.loss).v}${money(top.loss).u} · 占 ${top.loss_share.toFixed(1)}%` : ''}
           tone="warn" />
       </div>
 
       <Card
-        title="每个原因值不值得管"
-        note={<>点表头换排序，<b>再点一次切升序</b>。选中一行，下面的矩阵会把这一列点亮。</>}
+        title="退货原因可干预性评估"
+        note={<>点击表头切换排序，<b>再次点击切换升降序</b>。选中一行，下面的矩阵会把这一列点亮。</>}
         pad={false}
       >
         <div className="pg-table-wrap">

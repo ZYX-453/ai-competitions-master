@@ -317,7 +317,7 @@ export function Dashboard({
       {/* 热力图放在曲线下面：曲线讲整体走势，它讲"哪一类、哪一周" */}
       <Card
         title="类目 × 周 热力矩阵"
-        note={<>颜色 = 二项 z（偏离几个标准误，<b>跨类目可比</b>）；红框 = 双门槛判定的异常周。行首灰字 = 该类目基准退货率。点格子进归因。</>}
+        note={<>颜色 = 二项 z（偏离几个标准误，<b>跨类目可比</b>）；红框 = 双门槛判定的异常周。行首灰字 = 该类目基准退货率。点击单元格跳转至归因页。</>}
         pad={false}
         right={<span className="bi-card-hint">按 z 上色，不是按退货率高低</span>}
       >
@@ -334,7 +334,7 @@ export function Dashboard({
       <div className="pg-2col">
         <Card
           title="类目横向对比"
-          note={<>{scope ? `已选中 ${scope}，点一下退回全店。` : '点一行只看这一类，下面全程联动。'}</>}
+          note={<>{scope ? `已筛选：${scope}，点击"全店"恢复全局口径。` : '点击任一行可下钻该类目，下方图表联动更新。'}</>}
           pad={false}
           right={(
             <Segmented
@@ -387,7 +387,7 @@ export function Dashboard({
 
       <Card
         title={`需要解释的周 · ${d.scope}`}
-        note={<>只列通过双门槛的周。点表头可排序，点行进归因页。</>}
+        note={<>仅列出通过双门槛判定的周次。点击表头排序，点击行进入归因页。</>}
         pad={false}
       >
         {d.anomalies.length === 0 ? (

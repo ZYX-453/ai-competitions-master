@@ -117,23 +117,23 @@ def meta():
             for t in TOOL_SCHEMA
         ],
         'suggestions': [
-            {'label': '双11 那周为什么退货率高', 'question': '第44周退货率为什么涨了'},
-            {'label': '最近一周有问题吗', 'question': '最新一周差评有异常吗'},
-            {'label': '退货到底亏了多少钱', 'question': '退货总共损失了多少钱'},
-            {'label': '补多少钱最划算', 'question': '客服补偿补多少最划算'},
-            {'label': '服饰类目怎么回事', 'question': '服饰类目这周退货为什么涨了'},
-            {'label': '给我一套可执行方案', 'question': '第44周退货率涨了，我该怎么办'},
+            {'label': '第 44 周退货率异常归因', 'question': '第44周退货率为什么涨了'},
+            {'label': '最新一周异常检测', 'question': '最新一周差评有异常吗'},
+            {'label': '退货损失金额核算', 'question': '退货总共损失了多少钱'},
+            {'label': '客服补偿最优档位', 'question': '客服补偿补多少最划算'},
+            {'label': '服饰类目异常归因', 'question': '服饰类目这周退货为什么涨了'},
+            {'label': '生成可执行治理方案', 'question': '第44周退货率涨了，我该怎么办'},
             # ---- v3.1 评论分析四件套 ----
             # 【这四条为什么必须放进 suggestions】
             # 新能力如果只写在 README 里，演示时没有任何人会去点——
             # 首页能点的按钮就是这套系统"会做什么"的全部声明。
             # 四条分别对应情感 / 词云 / 画像 / 竞品，
             # 覆盖了四个模块各自最有代表性的问法。
-            {'label': '评论情感怎么样', 'question': '帮我分析一下评论的情感'},
-            {'label': '差评都在说什么', 'question': '差评都在说什么'},
-            {'label': '用户画像是什么样', 'question': '用户画像是什么样的'},
-            {'label': '和竞品比怎么样', 'question': '我们和竞品比怎么样'},
-            {'label': '数据是怎么来的', 'question': '你的评论数据是从哪来的'},
+            {'label': '评论情感极性分析', 'question': '帮我分析一下评论的情感'},
+            {'label': '负评关键词与动机', 'question': '差评都在说什么'},
+            {'label': '用户画像特征归纳', 'question': '用户画像是什么样的'},
+            {'label': '竞品负评率对标', 'question': '我们和竞品比怎么样'},
+            {'label': '评论语料来源说明', 'question': '你的评论数据是从哪来的'},
         ],
     }
 
@@ -498,11 +498,11 @@ def page_nav():
     return {
         'pages': [
             {'key': 'dashboard', 'title': '总览',
-             'subtitle': '现在怎么样、哪里最疼', 'icon': 'grid'},
+             'subtitle': '经营概况 · 异常分布 · 风险集中度', 'icon': 'grid'},
             {'key': 'attribution', 'title': '归因',
-             'subtitle': '这一周为什么涨了', 'icon': 'route'},
+             'subtitle': '本期退货率变动的主要贡献来源', 'icon': 'route'},
             {'key': 'reasons', 'title': '原因治理',
-             'subtitle': '9 个原因各自值不值得管', 'icon': 'layers'},
+             'subtitle': '九类退货原因的损失归集与可干预判断', 'icon': 'layers'},
             # 【自检页已从导航移除（2026-11-03）】
             # 那一页讲的是"我们验了什么、在多大的数据上验的"，是给评审/自己看的
             # 质保材料，对业务用户没有意义 —— 用户打开它只会觉得"这系统怎么在自夸"。
@@ -510,13 +510,13 @@ def page_nav():
             # "哪几周要解释、下一周谁去做什么"，读者能直接拿去开会。
             # EvalPage.tsx 仍留在前端（未接入路由），/api/pages/eval 与 /api/eval 也仍可用。
             {'key': 'plan', 'title': '预警策划',
-             'subtitle': '哪几周要解释、那一周谁做什么', 'icon': 'alert'},
+             'subtitle': '待解释周次识别与责任动作指派', 'icon': 'alert'},
             {'key': 'reviews', 'title': '评论洞察',
-             'subtitle': '情感 · 抱怨点 · 画像', 'icon': 'message'},
+             'subtitle': '情感极性 · 抱怨点分布 · 用户画像', 'icon': 'message'},
             {'key': 'competitors', 'title': '竞品雷达',
-             'subtitle': '我们在同类里处在什么位置', 'icon': 'target'},
+             'subtitle': '同类竞品负评率横向对标', 'icon': 'target'},
             {'key': 'chat', 'title': '问答',
-             'subtitle': '按需深入，让 Agent 自己查', 'icon': 'spark'},
+             'subtitle': '按需下钻分析', 'icon': 'spark'},
         ],
         'categories': hub.categories,
         # 【给前端的是实体名的扁平列表，不是 rt.entities() 的原样】

@@ -1087,6 +1087,16 @@ body:has(.pg-kpi-row) .app .pg {
   gap: 20px !important;
   align-items: start !important;
 }
+/* 【把所有子项的默认落点钉在主列，再让下面几条显式规则去覆盖】
+   这个栅格只在左侧留一条 252px 给「范围」面板，其余全部属于主内容。
+   但它用的是「逐个显式指定 grid-column / grid-row」的写法，只覆盖了
+   nth-of-type(1)(2)(3) 和 .pg-2col 这几个 —— 页面后来新增的卡片
+   （归因页第 4 张「促销机制效应检验」、.pg-note-line 说明行等）
+   全部没有位置，于是按自动流排进第一个空位：**252px 的侧栏**。
+   症状是卡片被压成窄条、内部三列数据挤成一团、说明行每行一个字。
+   一条通配兜住所有子项，比每加一张卡就补一条规则可靠得多。 */
+body:has(.pg-kpi-row) .app .pg > * { grid-column: 2; }
+
 /* 弹幕氛围层：横贯顶部，不占布局 */
 body:has(.pg-kpi-row) .app .pg > :nth-child(1) { grid-column: 1 / -1; grid-row: 1; min-height: 0; }
 /* 旧范围切换器（.bi-scope）已被 glass.js 注入的左侧「范围」面板（.glass-scope2）取代：
@@ -1094,6 +1104,17 @@ body:has(.pg-kpi-row) .app .pg > :nth-child(1) { grid-column: 1 / -1; grid-row: 
    252px 左栏保留，作为 .glass-scope2 的停靠区。 */
 body:has(.pg-kpi-row) .app .pg > :nth-child(2) { display: none !important; }
 /* 右侧：KPI 独立卡 + 各图表卡依次入格 */
+/* 【说明行必须显式落回主列，否则会被挤进 252px 的侧栏】
+   这个栅格显式写死了每个子项的 grid-column/row，没写的那几个会按自动流
+   排进第一个空位 —— 也就是第 1 列那条 252px 的侧栏。
+   结果就是一句「判定规则：异常 = …」被压成每行一个字的竖条，
+   看起来像渲染坏了。归因页的 .pg-note-line 正是这种情况。
+   这里统一兜住：所有 .pg-note-line 都进第 2 列、行号靠 auto 让它们
+   紧跟在上一张卡后面，不跟显式定位的那几张卡抢位置。 */
+body:has(.pg-kpi-row) .app .pg > .pg-note-line {
+  grid-column: 2; grid-row: auto; align-self: start;
+}
+
 /* 关键：容器去掉 1px 缝隙底色与边框（原 .pg-kpi-row 用 gap:1px + line-soft 做
    连通长条+分隔线），改成纯透明栅格，5 张卡各自完全独立 */
 body:has(.pg-kpi-row) .app .pg > .pg-kpi-row {
@@ -1122,6 +1143,8 @@ body:has(.pg-kpi-row) .app .pg > .pg-card:nth-of-type(3) { grid-column: 2; grid-
   body:has(.pg-kpi-row) .app .pg > .pg-card:nth-of-type(2),
   body:has(.pg-kpi-row) .app .pg > .pg-2col,
   body:has(.pg-kpi-row) .app .pg > .pg-card:nth-of-type(3) { grid-column: 1; grid-row: auto; }
+  /* 单列时说明行也回到第 1 列，否则它指向一个已不存在的第 2 列 */
+  body:has(.pg-kpi-row) .app .pg > .pg-note-line { grid-column: 1; grid-row: auto; }
 }
 /* 走势图异常点：柔粉，弱化强对比 */
 /* ================================================================ 走势图 · 深紫主色与辨识度

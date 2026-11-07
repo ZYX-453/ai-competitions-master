@@ -145,7 +145,7 @@ export function Reviews({
         {/* ---- 星级分布 ---- */}
         <Card
           title="星级分布"
-          note={<>情感判定<b>不读星级</b>（除文本信号太弱时兜底），所以这两个数不是同源的，可以互相检验。</>}
+          note={<>情感判定<b>不读取星级</b>（仅在文本信号不足时兜底），二者非同源指标，可交叉检验。</>}
           pad={false}
         >
           {d.rating_dist.length === 0 ? (
@@ -292,7 +292,7 @@ export function Reviews({
       {/* ---- 画像 ---- */}
       <Card
         title="用户画像"
-        note={<>每条结论都挂了一句<b>命中信号的原话</b>。原话里打黄底的那个词，就是它被判成这条依据的原因。</>}
+        note={<>每条结论都挂了一句<b>命中信号的原话</b>。原话中高亮的词，就是它被判成这条依据的原因。</>}
       >
         {!d.persona.groups || d.persona.groups.length === 0 ? (
           <Empty what="没有画像数据" />
