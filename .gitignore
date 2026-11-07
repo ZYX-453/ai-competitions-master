@@ -163,3 +163,9 @@ desktop.ini
 .ruff_cache/
 .coverage
 htmlcov/_tmp_clone/
+
+# 【截图验收的中间产物，不进仓库】
+# outputs/_shots/ 是调试时用 headless Edge 拍的各页截图（一次 6 张、约 10MB），
+# 用途只是"我确认这一版真的渲染出来了"，不是交付物，也不被任何文档引用。
+# 正式交付的图表在 reports/figs/，那批是受版本管理的。
+outputs/_shots/

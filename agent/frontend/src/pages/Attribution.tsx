@@ -80,6 +80,55 @@ export function Attribution({
   if (!week || week <= 0) return <Loading label="确定默认周次" />
   if (!d) return <Loading label={`拆解第 ${week} 周`} />
 
+  /* 【ok=false 必须显式拦掉，不能让页面继续往下画】
+     后端对"这一周不存在"（比如问第十周之外的第六十周）返回的是
+     ok=False + 一堆 0，而不是 HTTP 4xx。不拦的话：
+     退货率 0.00%、订单 0 单、瀑布图全空、判定规则照常写着"|z|≥2"，
+     整页看起来像一个"数据异常干净的周"，而不是"这一周不存在"。
+     这正是用户投诉过的那类问题 —— 系统看起来答了，其实答的不是你问的。 */
+  if (!d.ok) {
+    const hi = Math.max(0, ...d.available_weeks.map((w) => w.week))
+    const lo = d.available_weeks.length ? Math.min(...d.available_weeks.map((w) => w.week)) : 0
+    const median = d.available_weeks.length
+      ? d.available_weeks[Math.floor(d.available_weeks.length / 2)].week
+      : 0
+    /* 【异常周不能写死 44】
+       44 是这一份数据集里的最大异常周，但它是数据属性、不是代码常量：
+       换一份数据、或者后端调了双门槛，44 可能就是个完全正常的周。
+       从 available_weeks 里按 |delta_pp| 挑最狠的那一周，才不会写死一个
+       在别的数据集里站不住的结论。 */
+    const worst = d.available_weeks
+      .filter((w) => w.is_anomaly)
+      .sort((a, b) => Math.abs(b.delta_pp) - Math.abs(a.delta_pp))[0]
+    /* 【不能只甩一句 Empty 就走】
+       整页被一个空态占满，连周次选择器都没了 —— 用户被"卡"在 60 周这一屏，
+       唯一的出路是改地址栏。越界本来是最需要给出退路的一种状态：
+       所以要带上「最近一周」「数据中位周」两个一键跳转。 */
+    return (
+      <div className="pg">
+        <Card title={`数据里没有第 ${d.week} 周`}>
+          <Empty
+            what={`当前数据集只有第 ${lo}–${hi} 周`}
+            why={`你问的第 ${d.week} 周不在范围内。换一个周次，或直接跳过去看：`}
+          />
+          <div className="pg-note-line" style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <button className="pg-btn ghost" onClick={() => setWeek(hi)}>
+              跳到最近一周（第 {hi} 周）
+            </button>
+            <button className="pg-btn ghost" onClick={() => setWeek(median)}>
+              跳到第 {median} 周
+            </button>
+            {worst && (
+              <button className="pg-btn ghost" onClick={() => setWeek(worst.week)}>
+                跳到异常周（第 {worst.week} 周，偏离 {pp(worst.delta_pp)}pp）
+              </button>
+            )}
+          </div>
+        </Card>
+      </div>
+    )
+  }
+
   const anomalies = d.available_weeks.filter((w) => w.is_anomaly)
   const loss = d.structure ? money(d.structure.total_loss) : null
 

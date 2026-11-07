@@ -122,29 +122,59 @@ export function Competitors({
   /* ---- 模块③蝴蝶图 ----
      【log₂ 比天然是双向的】正数偏向本店、负数偏向对标，
      左右镜像的条形让"方向"变成一眼可读的位置，而不是让读者
-     先记住"正数是哪边"。条长按 |lr| 归一，词与词之间可比。 */
+     先记住"正数是哪边"。 */
   const ours = (d.contrast.ours ?? []).slice(0, 12)
   const theirs = (d.contrast.theirs ?? []).slice(0, 12)
-  const maxLr = Math.max(1, ...ours.map((w) => w.lr), ...theirs.map((w) => w.lr))
+  /* 【三条必须同时满足，少一条这张图就会骗人】
+     ① 宽度用 |lr|。lr = log₂(本店占比 / 对标占比)，两侧符号必然相反：
+        本店侧正、对标侧负。直接 w.lr / max 会算出负宽度，CSS 当无效值
+        丢弃，右栏 12 行只剩浅色轨道 —— 数据一直在，是条长算成了负数。
+     ② 两侧各自归一，不共用一个分母。实测本店侧 lr 落在 3.4–4.7，
+        对标侧落在 -9.3 – -10.1，量级差一倍以上。共用一个分母的结果是：
+        右栏 12 根条全部接近满长（彼此差不到 3%），左栏全部缩到 3 成，
+        **两边都读不出差异**，图就退化成"左右都有东西"。
+     ③ 归一后不允许出现 0 长度。lr=0 意味着两边用量完全一样，
+        那种词本来就不该进对比表；如果进了，留一道 2% 的最小可见宽度，
+        否则空轨道会被误读成"没有数据"。
+
+     【为什么右栏看起来还是一排等长的条 —— 这是数据本身，不是 bug】
+     对标侧的词全是「只出现在竞品语料里」的低频词（n=6~39），
+     本店出现 0 次，所以 log₂ 比值被分母下限压到 -9.3 ~ -10.1，
+     彼此差异只有 0.8 个单位，占满量程的 92%~100%。
+     条长如实反映这件事：它们确实是"同等稀薄地只属于对方"。
+     为了好看而拉伸到 0–100% 才是撒谎 —— 那会让 n=6 的「主播」
+     和 n=39 的「回购」看起来差好几倍，而真实差异只有 log₂ 上的 0.14。
+     数字列（11/9/39/7…）才是这一段该读的信息。 */
+  const maxOurs = Math.max(1, ...ours.map((w) => Math.abs(w.lr)))
+  const maxTheirs = Math.max(1, ...theirs.map((w) => Math.abs(w.lr)))
+  const barW = (lr: number, max: number) => `${Math.max((Math.abs(lr) / max) * 100, 2)}%`
 
   /** p 值的读法文案（三处复用） */
   const pText = (v: number) => v <= 0 ? '<1e-4' : v < 1e-4 ? v.toExponential(1) : v.toFixed(4)
 
-  /** 蝴蝶图浮层：把 log₂ 比翻译成"偏向多少倍" */
-  const bflyTip = (w: { word: string; n: number; lr: number }, side: 'ours' | 'theirs') => (
-    <div>
-      <div className="bi-tip-h">{w.word}</div>
-      <div className="bi-tip-row">出现 <b>{nf(w.n)}</b> 条</div>
-      <div className="bi-tip-row">log₂比 <b>{w.lr.toFixed(2)}</b></div>
-      <div className="bi-tip-row dim">
-        {w.lr >= 1
-          ? `偏向${side === 'ours' ? '本店' : '对标'}约 ${Math.pow(2, w.lr).toFixed(1)} 倍`
-          : w.lr >= 0.4
-            ? `轻度偏向${side === 'ours' ? '本店' : '对标'}`
-            : '两边用量接近'}
+  /** 蝴蝶图浮层：把 log₂ 比翻译成"偏向多少倍"
+   *  【用 |lr| 算倍数，方向由 side 决定】
+   *  lr 在本店侧为正、对标侧为负，但两侧展示的语义是同一个：
+   *  "这一侧比另一侧常用 2^|lr| 倍"。拿带符号的 lr 去 pow(2, -10)
+   *  会得到 0.001 倍，读者会以为"几乎不用"，而实际是压倒性常用。 */
+  const bflyTip = (w: { word: string; n: number; lr: number }, side: 'ours' | 'theirs') => {
+    const mag = Math.abs(w.lr)
+    const other = side === 'ours' ? '对标' : '本店'
+    return (
+      <div>
+        <div className="bi-tip-h">{w.word}</div>
+        <div className="bi-tip-row">出现 <b>{nf(w.n)}</b> 条</div>
+        <div className="bi-tip-row">log₂比 <b>{w.lr.toFixed(2)}</b></div>
+        <div className="bi-tip-row dim">
+          {mag >= 1
+            ? `本侧比${other}常用约 ${Math.pow(2, mag).toFixed(1)} 倍`
+            : mag >= 0.4
+              ? `本侧比${other}略常用`
+              : '两边用量接近'}
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
     <div className="pg">
@@ -422,7 +452,7 @@ export function Competitors({
                     onMouseMove={(ev) => tip3.show(ev, bflyTip(w, 'ours'), true)}
                     onMouseLeave={tip3.hide}>
                     <span className="pg-bfly-w">{w.word}</span>
-                    <span className="pg-bfly-bar"><i style={{ width: `${(w.lr / maxLr) * 100}%` }} /></span>
+                    <span className="pg-bfly-bar"><i style={{ width: barW(w.lr, maxOurs) }} /></span>
                     <span className="pg-bfly-n num">{nf(w.n)}</span>
                   </div>
                 ))}
@@ -434,7 +464,7 @@ export function Competitors({
                     onMouseMove={(ev) => tip3.show(ev, bflyTip(w, 'theirs'), true)}
                     onMouseLeave={tip3.hide}>
                     <span className="pg-bfly-n num">{nf(w.n)}</span>
-                    <span className="pg-bfly-bar"><i style={{ width: `${(w.lr / maxLr) * 100}%` }} /></span>
+                    <span className="pg-bfly-bar"><i style={{ width: barW(w.lr, maxTheirs) }} /></span>
                     <span className="pg-bfly-w">{w.word}</span>
                   </div>
                 ))}

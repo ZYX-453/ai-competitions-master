@@ -589,41 +589,54 @@
 
   /* ================================================================ 蝴蝶图 → 左右双栏对比条形
      左栏「我们的数据」= 本店常说（深青绿条），右栏「竞品数据」= 对标常说
-     （淡灰紫条、透明度更低、视觉更轻）。同词在两栏同一行对齐，
-     中间浅色分隔线，数值右对齐。数据从原 DOM 两侧分别读取。 */
+     （淡灰紫条、透明度更低、视觉更轻）。
+
+     【为什么两栏各自独立成列，不按词合并成一张表】
+     两侧的词集在数据层面就是互斥的：后端给的是 only_in_target
+     （只在本店高频）和 only_in_base（只在竞品高频），按定义没有交集。
+     早先那版把两侧读进一个 Map、按词合并，于是每一行必然只有一侧有条、
+     另一侧是「—」，还按"两栏宽度的最大值"混排 —— 左栏第 1 行、
+     右栏第 2 行这样交错，读者会误以为在对比同一个词。
+     正确形态是两列各自排序、各自归一：左列回答"我们爱说什么"，
+     右列回答"他们爱说什么"，中间的分隔线只表示这是两组不同的词。 */
   function enhanceButterfly() {
     document.querySelectorAll('.pg-bfly-wrap').forEach((wrap) => {
       if (wrap.dataset.glassBfly === '1') return;
-      const map = new Map();
+      const sides = { ours: [], theirs: [] };
       wrap.querySelectorAll('.pg-bfly-side').forEach((side) => {
-        const isOurs = side.classList.contains('ours');
+        const key = side.classList.contains('ours') ? 'ours' : 'theirs';
         side.querySelectorAll('.pg-bfly-row').forEach((r) => {
           const w = r.querySelector('.pg-bfly-w');
           const n = r.querySelector('.pg-bfly-n');
           const i = r.querySelector('.pg-bfly-bar i');
           if (!w || !i) return;
-          const word = w.textContent.trim();
-          const rec = map.get(word) || { word, oN: '', oP: 0, tN: '', tP: 0 };
-          if (isOurs) { rec.oN = n ? n.textContent.trim() : ''; rec.oP = parseFloat(i.style.width) || 0; }
-          else { rec.tN = n ? n.textContent.trim() : ''; rec.tP = parseFloat(i.style.width) || 0; }
-          map.set(word, rec);
+          sides[key].push({
+            word: w.textContent.trim(),
+            n: n ? n.textContent.trim() : '',
+            p: parseFloat(i.style.width) || 0,
+          });
         });
       });
-      if (!map.size) return;
-      const rows = [...map.values()].sort(
-        (a, b) => Math.max(b.oP, b.tP) - Math.max(a.oP, a.tP));
+      if (!sides.ours.length && !sides.theirs.length) return;
+      const col = (list, cls) =>
+        `<div class="gb3-col ${cls}">` +
+        list.map((r) =>
+          `<div class="gb3-row" title="${r.word} · ${r.n || '—'} 条">` +
+          `<span class="w">${r.word}</span>` +
+          `<span class="cell"><i class="track"><i class="bar" style="width:${r.p.toFixed(1)}%"></i></i>` +
+          `<b class="n">${r.n || '—'}</b></span>` +
+          `</div>`).join('') +
+        `</div>`;
       const box = document.createElement('div');
       box.className = 'glass-bfly3';
       box.innerHTML =
-        `<div class="gb3-head"><span class="hw"></span><span class="ho">我们的数据</span><span class="ht">竞品数据</span></div>` +
-        rows.map((r) =>
-          `<div class="gb3-row" title="${r.word} · 本店 ${r.oN || '—'} 次 / 对标 ${r.tN || '—'} 次">` +
-          `<span class="w">${r.word}</span>` +
-          `<span class="cell co"><i class="track"><i class="bar" style="width:${r.oP.toFixed(1)}%"></i></i><b class="n">${r.oN || '—'}</b></span>` +
-          `<span class="cell ct"><i class="track"><i class="bar" style="width:${r.tP.toFixed(1)}%"></i></i><b class="n">${r.tN || '—'}</b></span>` +
-          `</div>`
-        ).join('') +
-        `<div class="gb3-note">条长 = 差异幅度（log₂ 比值）；同词左右同行对齐，「—」表示该侧未进高频词</div>`;
+        `<div class="gb3-head"><span class="ho">我们的数据 · 本店常说</span>` +
+        `<span class="ht">竞品数据 · 对标常说</span></div>` +
+        `<div class="gb3-body">` +
+        col(sides.ours, 'co') + col(sides.theirs, 'ct') +
+        `</div>` +
+        `<div class="gb3-note">条长 = 该侧内部的差异幅度（按 log₂ 比值各自归一），所以左右两栏的长度不可直接相减；` +
+        `两栏的词集按定义不重叠 ——「只有本店说」和「只有竞品说」本来就不是同一批词。</div>`;
       wrap.style.display = 'none';
       wrap.after(box);
       wrap.dataset.glassBfly = '1';
