@@ -170,6 +170,23 @@ htmlcov/_tmp_clone/
 # 正式交付的图表在 reports/figs/，那批是受版本管理的。
 outputs/_shots/
 
+# 【outputs/_dev/ 是无头截图与 CDP 探针的临时工作区，永不入库】
+# 里面两个引导页（shot.sh 用的 _v.html、a11y.cjs 用的 _ktest.html）
+# 都写了 sessionStorage.setItem('cj-login','1') —— 那是**绕过登录**。
+# 它们只在本机 headless 截图时存在，一旦被 `git add -A` 带进仓库，
+# 就等于把一段登录旁路连同部署脚本一起发布出去。
+# 这也是为什么它们放在 outputs/ 而不是 frontend/public/：
+# public/ 下的文件会被 vite 原样拷进 dist，并随构建上线。
+outputs/_dev/
+
+# 【dist 下以 _ 开头的页面一律不入库，也不该存在】
+# 本仓库把 dist/ 纳入版本管理（为了直接静态托管），于是"拷一个引导页
+# 进去截图"这种临时动作会把文件带进仓库。已经发生过一次：
+# dist/_v.html 被 git add -A 提交，而它含
+# sessionStorage.setItem('cj-login','1') —— 等于在线上留了一个登录旁路。
+# 构建会清空 dist，正常产物里不会出现 _ 开头的页面，这条规则不误伤。
+agent/frontend/dist/_*.html
+
 # 【Vite 每次加载 vite.config.ts 都会吐一个带时间戳的临时副本】
 # 形如 vite.config.ts.timestamp-1793618703084-*.mjs，是 esbuild 的中间产物。
 # 它只在配置变更后出现，很容易被 `git add -A` 顺手带进仓库

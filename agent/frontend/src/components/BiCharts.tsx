@@ -98,7 +98,14 @@ export function Waterfall({
   const yPct = (v: number) => ((v - geo.lo) / span) * 100
 
   return (
-    <div className="bi-wa">
+    /* 【为什么要一个 role="group" 而不是只给每根柱子 aria-label】
+       柱子各自有可读的名字（"服饰 +1.52"），但读屏用户按 Tab
+       逐根过时，听到的是 6 个孤立的数字，没有"这是一张什么图、
+       这些数加起来等于什么"的整体交代。整张图的语义（可加分解、
+       末柱是总和）只能由容器承担。
+       aria-label 用一句话把口径说全：图的类型 + 分解对象 + 总数。 */
+    <div className="bi-wa" role="group"
+      aria-label={`瀑布图：把全店退货率变动拆成 ${steps.filter((s) => !s.isTotal).length} 个来源，末柱为合计。可用 Tab 逐项查看。`}>
       <div className="bi-wa-plot" style={{ height }}>
         {/* 零轴：所有"下降"和"上升"的分界。比普通网格线实，
             因为在这张图里它同时是"改善/恶化"的分界。 */}
@@ -286,7 +293,7 @@ export function Donut({
   }, [items, total, cmap])
 
   return (
-    <div className="bi-donut">
+    <div className="bi-donut" role="group" aria-label="环形图：{items.length} 个扇区，总 {centerLabel} {centerValue}。用 Tab 逐项查看。">
       <div className="bi-donut-fig">
         <svg viewBox="0 0 180 180" className="bi-donut-svg" role="img"
           aria-label={`${centerLabel} ${centerValue}`}>
@@ -423,7 +430,7 @@ export function StackedShare({
   const sumKeep = items.reduce((s, x) => s + x.keep, 0)
 
   return (
-    <div className="bi-ss">
+    <div className="bi-ss" role="group" aria-label="堆叠占比图：{series.length} 个时点、{keys.length} 个成分，共占 100%。用 Tab 逐项查看。">
       {/* 先给整体口径：读者知道总盘子，再去看每一行 */}
       <div className="bi-ss-head">
         <span>
@@ -521,7 +528,7 @@ export function Diverging({
   const maxAbs = Math.max(...items.map((x) => Math.abs(x.value)), 1e-9)
 
   return (
-    <div className="bi-dv">
+    <div className="bi-dv" role="group" aria-label="发散条图：{items.length} 项相对基准的增减。用 Tab 逐项查看。">
       {zeroLabel && (
         <div className="bi-dv-head">
           <span>{zeroLabel[0]}</span>
@@ -699,7 +706,7 @@ export function Quadrant({
   }, [points, height, geo])
 
   return (
-    <div className="bi-q">
+    <div className="bi-q" role="group" aria-label="象限散点图：横轴 {xLabel}、纵轴 {yLabel}，每点一个对象。用 Tab 逐项查看。">
       <div className="bi-q-plot" style={{ height }}>
         {/* 象限分割线 */}
         {quadrants && (
@@ -887,7 +894,7 @@ export function Slope({
      线粗几乎一样；反而让"是否交叉"这个主视觉被粗细干扰。
      线宽统一，"陡不陡"才是唯一可读的变量。 */
   return (
-    <div className="bi-slope">
+    <div className="bi-slope" role="group" aria-label="坡度图：{items.length} 项从基准到本周的变化，两列高度差即变动幅度。用 Tab 逐项查看。">
       {/* 【表头必须写清"各自按什么排序"】
           这张图的读法是"两列各自的排名有没有错位"，而两列各自降序：
           左列按订单占比降、右列按差距降。不写出来的话，
@@ -1123,7 +1130,7 @@ export function DualRing({
   }
 
   return (
-    <div className="bi-dring">
+    <div className="bi-dring" role="group" aria-label="双环图：外环按{outerLabel}、内环按{innerLabel}，两环宽度差异即单件代价差异。用 Tab 逐项查看。">
       <div className="bi-dring-fig">
         <svg viewBox="0 0 180 180" className="bi-dring-svg" role="img"
           aria-label={outerLabel + '与' + innerLabel + '对照，' + centerLabel + ' ' + centerValue}>
@@ -1371,7 +1378,7 @@ export function Treemap({
   }, [groups])
 
   return (
-    <div className="bi-tree">
+    <div className="bi-tree" role="group" aria-label="树图：面积即规模，按一级归属分组。用 Tab 逐项查看。">
       {/* 【外层必须是滚动容器，不能只给最小宽度】
           写了 min-width: 420px 但没有 overflow-x: auto 的话，
           容器一窄，最小宽度撑出去的部分会被父级直接裁掉 ——

@@ -21,6 +21,7 @@ import { getJson } from '../lib/sse'
 import type { ReviewData } from '../lib/pages'
 import { Card, Stat, Bar, Empty, Loading, Fail, nf, pp } from '../components/PageKit'
 import { HBars, Segmented, useTip } from '../components/BiKit'
+import { PersonaBoard } from '../components/PersonaBoard'
 
 export function Reviews({
   entities, entity, setEntity,
@@ -292,45 +293,18 @@ export function Reviews({
       {/* ---- 画像 ---- */}
       <Card
         title="用户画像"
-        note={<>每条结论都挂了一句<b>命中信号的原话</b>。原话中高亮的词，就是它被判成这条依据的原因。</>}
+        note={<>每条结论都带<b>占比</b>与<b>命中原话</b>。点一条信号展开它的证据，原话中高亮的就是被判成这条依据的那个词。</>}
       >
         {!d.persona.groups || d.persona.groups.length === 0 ? (
           <Empty what="没有画像数据" />
         ) : (
-          <div className="pg-persona">
-            {d.persona.groups.map((g) => (
-              <div className="pg-ps-group" key={g.group}>
-                <div className="pg-ps-h">
-                  {g.group}
-                  {g.desc && <span className="pg-ps-desc">{g.desc}</span>}
-                </div>
-                {(g.items ?? []).map((it) => (
-                  <div className="pg-ps-item" key={it.signal}>
-                    <div className="pg-ps-top">
-                      <span className="pg-ps-signal">{it.signal}</span>
-                      <span className="pg-ps-pct num">{(it.pct ?? 0).toFixed(1)}%</span>
-                      <span className="pg-ps-n num dim">n={nf(it.n)}</span>
-                    </div>
-                    {it.quote && (
-                      <div className="pg-ps-quote">
-                        <Mark text={it.quote} hit={it.matched} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* 【cannot 在画像块内部，不折叠】 */}
-        {d.persona.cannot && d.persona.cannot.length > 0 && (
-          <div className="pg-cannot">
-            <div className="pg-cannot-h">这组画像回答不了什么</div>
-            <ul>
-              {d.persona.cannot.map((c, i) => <li key={i}>{c}</li>)}
-            </ul>
-          </div>
+          /* 【用 PersonaBoard 取代原来的 .pg-persona 静态块】
+             旧块只有条形 + n 数，而且读的是 it.quote（单数），
+             而后端给的是 quotes[] —— 所以原话证据从来没显示过。
+             新块补回证据、加上占比与雷达概览。
+             注意类名换成了 .persona-board：glass.js 的 enhancePersona
+             只认 .pg-persona，找不到就自动跳过，不会再来改写这一块。 */
+          <PersonaBoard data={d.persona} />
         )}
       </Card>
 

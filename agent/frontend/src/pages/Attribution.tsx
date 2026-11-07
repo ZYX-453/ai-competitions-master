@@ -320,6 +320,15 @@ export function Attribution({
           />
         )}
       >
+        {/* 【切换视图时的过渡】
+            六张三合一的图共用一块区域，切换是整块替换：
+            上一张的柱子/扇区在同一帧消失，下一张的立刻长出来。
+            没有过渡时，读者会先看到一次闪烁，然后必须从头重新定位
+            "轴在哪、标签在哪" —— 而两张图讲的其实是同一批类目。
+            这里用一个 key + CSS 动画：key 变化 → 节点重建 → 淡入 +
+            轻微上移 4px。幅度刻意做得很小，因为这是"确认切换发生了"，
+            不是入场表演；一次演示里可能切十几次，动效重了会烦。 */}
+        <div key={catView} className="pg-viewfade">
         {d.category_contribution.length === 0 ? (
           <Empty what="这一周没有分到这个类目" />
         ) : catView === 'waterfall' ? (
@@ -541,6 +550,7 @@ export function Attribution({
             </tbody>
           </table>
         )}
+        </div>
       </Card>
 
       {/* ---- ③ 卖的东西变了吗 ---- */}
@@ -573,6 +583,7 @@ export function Attribution({
             />
           )}
         >
+          <div key={stView} className="pg-viewfade">
           {stView === 'shift' ? (
             <Diverging
               items={d.structure.items.map((x) => ({
@@ -886,6 +897,7 @@ export function Attribution({
             本周共 {nf(d.structure.total_returns)} 条退货，净损失
             {' '}{loss?.v}{loss?.u}；对照口径为「{d.structure.baseline_scope}」
             {' '}{nf(d.structure.baseline_returns)} 条。
+          </div>
           </div>
         </Card>
       )}

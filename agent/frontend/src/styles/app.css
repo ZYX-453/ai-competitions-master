@@ -5738,3 +5738,319 @@ table.tbl {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* ===========================================================================
+ * 用户画像工作台（PersonaBoard）
+ *
+ * 【为什么不复用 .pg-persona / .pg-ps-* 那套类名】
+ * 那套类名被 glass.js 的 enhancePersona 接管：它会读 DOM 重排成另一套结构。
+ * 新组件自带交互状态（雷达高亮、原话展开），一旦被外部改写，
+ * React 的 state 和 DOM 就会脱节。所以换一套前缀 .psb-，
+ * enhancePersona 找不到 .pg-persona 就自动跳过。
+ * =========================================================================== */
+.persona-board { display: grid; gap: 18px; }
+
+/* ---- 摘要带 ---- */
+.psb-summary {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px; padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(120deg, rgba(107,91,149,.05), rgba(62,142,135,.04));
+  border: 1px solid rgba(120,110,140,.12);
+}
+.psb-sum-i { display: grid; gap: 2px; text-align: center; }
+.psb-sum-i b {
+  font-size: 24px; font-weight: 750; color: var(--fg);
+  font-variant-numeric: tabular-nums; letter-spacing: -.01em;
+}
+.psb-sum-i span { font-size: 11.5px; color: var(--fg-3); }
+
+/* ---- 主区：左雷达 + 右证据卡 ---- */
+.psb-main {
+  display: grid; grid-template-columns: 388px minmax(0, 1fr);
+  gap: 20px; align-items: start;
+}
+@media (max-width: 1180px) { .psb-main { grid-template-columns: 1fr; } }
+
+.psb-left {
+  position: sticky; top: 12px;
+  padding: 14px 12px 12px; border-radius: 16px;
+  background: rgba(255,255,255,.5);
+  border: 1px solid rgba(120,110,140,.1);
+}
+.psb-left-t { font-size: 12.5px; font-weight: 700; color: var(--fg-2); text-align: center; }
+.psb-radar { width: 100%; height: auto; display: block; }
+.psb-radar-note {
+  font-size: 11px; line-height: 1.7; color: var(--fg-4);
+  padding: 6px 8px 0; border-top: 1px dashed rgba(120,110,140,.18);
+}
+.psb-radar-note strong { color: var(--fg-3); font-weight: 600; }
+
+/* ---- 画像卡 ---- */
+.psb-right { display: grid; gap: 12px; }
+.psb-grp {
+  border-radius: 14px; padding: 12px 14px 10px;
+  background: rgba(255,255,255,.55);
+  border: 1px solid rgba(120,110,140,.12);
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+/* 【高亮靠边框和阴影，不靠整卡换底色】
+   整卡换色会让四张卡在 hover 时轮番变色，视觉上很吵；
+   只描一道本组色的边 + 一点同色投影，足够表达"这一组被选中"。 */
+.psb-grp.on {
+  border-color: var(--tone);
+  box-shadow: 0 4px 18px -8px var(--tone);
+  background: rgba(255,255,255,.85);
+}
+.psb-grp-h { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.psb-grp-dot { width: 8px; height: 8px; border-radius: 50%; align-self: center; }
+.psb-grp-h b { font-size: 14px; font-weight: 700; color: var(--fg); }
+.psb-grp-d { font-size: 11.5px; color: var(--fg-4); }
+
+/* ---- 单条信号 ---- */
+.psb-sig { border-radius: 10px; }
+.psb-sig-h {
+  width: 100%; display: grid;
+  grid-template-columns: minmax(76px, auto) minmax(60px, 1fr) 52px 56px 16px;
+  align-items: center; gap: 10px;
+  padding: 7px 8px; border: 0; background: transparent;
+  font: inherit; cursor: pointer; text-align: left; border-radius: 10px;
+  transition: background .15s ease;
+}
+.psb-sig-h:hover { background: rgba(255,255,255,.7); }
+.psb-sig-h:focus-visible { outline: 2px solid var(--tone); outline-offset: 2px; }
+.psb-sig-name { font-size: 13px; font-weight: 550; color: var(--fg-2); }
+.psb-sig-track {
+  height: 8px; border-radius: 5px; overflow: hidden;
+  background: rgba(120,110,140,.1);
+}
+.psb-sig-track i { display: block; height: 100%; border-radius: 5px; opacity: .8; }
+.psb-sig-pct { font-size: 12.5px; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.psb-sig-n { font-size: 11.5px; color: var(--fg-4); text-align: right; font-variant-numeric: tabular-nums; }
+.psb-sig-caret { font-size: 13px; color: var(--fg-4); text-align: center; }
+.psb-sig.open .psb-sig-h { background: rgba(255,255,255,.85); }
+
+/* ---- 原话证据 ---- */
+.psb-sig-body {
+  display: grid; gap: 8px;
+  padding: 4px 8px 10px 14px; margin-left: 6px;
+  border-left: 2px solid var(--tone);
+}
+.psb-quote { display: grid; gap: 3px; }
+.psb-quote-t { display: flex; align-items: center; gap: 10px; }
+.psb-stars { font-size: 11px; color: #C08A3E; letter-spacing: 1px; }
+.psb-stars i { color: rgba(120,110,140,.25); font-style: normal; }
+.psb-hit { font-size: 11px; font-weight: 600; }
+.psb-quote-x {
+  font-size: 12.5px; line-height: 1.75; color: var(--fg-2);
+  padding: 7px 10px; border-radius: 8px;
+  background: rgba(120,110,140,.045);
+}
+.psb-quote-x mark { padding: 0 2px; border-radius: 3px; font-weight: 650; }
+
+/* ---- 边界声明 ---- */
+.psb-cannot {
+  padding: 12px 16px; border-radius: 12px;
+  background: rgba(176,101,122,.05);
+  border: 1px dashed rgba(176,101,122,.25);
+}
+.psb-cannot b { font-size: 12.5px; color: #96566A; }
+.psb-cannot ul { margin: 6px 0 0; padding-left: 18px; }
+.psb-cannot li { font-size: 11.8px; line-height: 1.75; color: var(--fg-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  .psb-grp, .psb-sig-h { transition: none; }
+}
+
+/* ===========================================================================
+ * 竞品维度矩阵（CompMatrix）
+ *
+ * 【布局用 grid 而不是 table】
+ * 需要"整列高亮"和"整行高亮"同时存在（十字读法），table 的
+ * tr/td 只能整行变色，列高亮要靠 nth-child 逐个写死 —— 列数一变就失效。
+ * grid 用 1fr 均分，配合 .is-colon 直接给单格上描边，列数变化自动适应。
+ *
+ * 【格子为什么不做成正方形】
+ * 6 行 × 5 列，正方形需要 6×92px = 550px 高，这一页已经很长；
+ * 而格子里只有两位小数 + 一位百分位，横向一点空间就够。
+ * 定高 46px 让 6 行落在 ~300px，与左右其他卡片视觉均衡。
+ * =========================================================================== */
+.cmx-wrap { position: relative; padding: 14px 18px 12px; }
+
+.cmx {
+  display: grid;
+  grid-template-columns: 132px repeat(5, minmax(0, 1fr)) 62px;
+  gap: 3px;
+  min-width: 0;
+}
+
+/* ---- 表头 ---- */
+.cmx-hrow { display: contents; }
+.cmx-hcell {
+  padding: 6px 8px 8px;
+  font-size: 11px;
+  color: var(--fg-3);
+  border-bottom: 1px solid var(--line-soft);
+  min-width: 0;
+}
+.cmx-hdim { display: flex; align-items: flex-end; font-weight: 600; color: var(--fg-4); }
+.cmx-hcol {
+  display: grid; gap: 1px; justify-items: center; align-content: end;
+  text-align: center; border-radius: 8px 8px 0 0;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+  min-width: 0;
+}
+.cmx-hcol-n {
+  font-size: 10.5px; line-height: 1.35; color: var(--fg-2);
+  font-weight: 600;
+  /* 长名（竞品D（新锐内容型））两行内显示，超出省略 */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden; word-break: break-all;
+}
+.cmx-hcol-v { font-size: 12px; font-weight: 700; color: var(--fg); font-variant-numeric: tabular-nums; }
+.cmx-hcol-tag {
+  font-size: 9px; padding: 0 5px; border-radius: 3px;
+  background: var(--accent-dim); color: var(--accent);
+}
+.cmx-hcol.is-us { cursor: default; }
+.cmx-hcol:not(.is-us) { cursor: pointer; }
+.cmx-hcol:not(.is-us):hover { background: rgba(255,255,255,.5); }
+.cmx-hcol:focus-visible { outline: 2px solid var(--accent); outline-offset: -1px; }
+.cmx-hcol.is-on {
+  background: var(--accent-dim);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.cmx-hgap { display: flex; align-items: flex-end; justify-content: flex-end; font-weight: 600; color: var(--fg-4); }
+
+/* ---- 维度列 ---- */
+.cmx-row { display: contents; }
+.cmx-dcell {
+  display: grid; gap: 3px; align-content: center;
+  padding: 4px 10px 4px 0;
+  min-width: 0;
+}
+.cmx-dname { font-size: 12px; font-weight: 600; color: var(--fg-2); white-space: nowrap; }
+/* 维度名下的细条 = 该维极差占满量程(70pp)的比例。
+   它替代了原来"差距 pp"单独一列的位置感：一眼看出哪一维的
+   跨度在整张图里算大。70pp 是 6 维里的最大可能值上界。 */
+.cmx-dbar { display: block; height: 3px; border-radius: 2px; background: var(--line-soft); overflow: hidden; }
+.cmx-dbar i { display: block; height: 100%; border-radius: 2px; background: var(--bad-line); }
+
+/* ---- 数值格 ---- */
+.cmx-cell {
+  position: relative;
+  display: flex; align-items: center; justify-content: center; gap: 4px;
+  height: 46px; border-radius: var(--r-cell);
+  cursor: pointer;
+  transition: opacity var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  min-width: 0;
+}
+.cmx-cell.is-us { cursor: default; }
+.cmx-v { font-size: 13px; font-weight: 650; font-variant-numeric: tabular-nums; letter-spacing: -.01em; }
+/* 「最差」只在深色格上以极小字号出现 —— 它是给扫视用的锚点，
+   不是标签。放大了会和大字数值抢注意力。 */
+.cmx-worst {
+  position: absolute; right: 5px; bottom: 3px;
+  font-size: 8.5px; font-weight: 600; opacity: .72; letter-spacing: .02em;
+}
+.cmx-cell.is-worst { box-shadow: inset 0 0 0 1.5px var(--bad-line); }
+/* 本店列：加一道左侧分隔，表示"基准"。用 inset 阴影而不是 border，
+   这样格子底色不受影响。
+   【为什么本店格还要单独压一层底】
+   本店在所有维度都是最优 → 每行它都拿到 t=0 的最浅色，
+   在白色卡面上几乎看不见格子边界。加一层极淡的主色底 +
+   左侧 2.5px 竖线，让"这一列是基准"这件事由形态表达，
+   而不是靠"它比别处都浅"这种间接线索。 */
+.cmx-cell.is-us {
+  box-shadow: inset 2.5px 0 0 var(--accent);
+  outline: 1px solid rgba(107, 91, 149, .10);
+  outline-offset: -1px;
+}
+.cmx-cell.is-on { box-shadow: inset 0 0 0 2px var(--accent); }
+.cmx-cell.is-colon:not(.is-us):not(.is-on) { box-shadow: inset 0 0 0 1px var(--accent-line); }
+.cmx-cell:hover { box-shadow: inset 0 0 0 1.5px var(--accent); z-index: 1; }
+.cmx-cell.is-dim { opacity: .25; }
+
+/* 极差列 */
+.cmx-gap {
+  display: flex; align-items: baseline; justify-content: flex-end; gap: 2px;
+  padding-right: 4px; height: 46px;
+  font-size: 12.5px; font-weight: 650; color: var(--warn);
+  background: transparent; cursor: default;
+}
+.cmx-gap small { font-size: 9.5px; font-weight: 500; color: var(--fg-4); }
+
+/* ---- 浮层 ----
+   绝对定位在右下角而不是跟随鼠标：这张图的行高固定、
+   内容长度也稳定（最多三行），固定位置比跟随鼠标更不容易遮住邻格。 */
+.cmx-tip {
+  position: absolute; right: 18px; bottom: 52px; z-index: 6;
+  min-width: 190px; max-width: 260px;
+  padding: 9px 12px; border-radius: 10px;
+  background: rgba(255,255,255,.96);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-lift);
+  backdrop-filter: blur(14px);
+  pointer-events: none;
+}
+.cmx-tip-h {
+  font-size: 11.5px; font-weight: 700; color: var(--fg);
+  padding-bottom: 5px; margin-bottom: 5px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.cmx-tip-row { font-size: 11.5px; line-height: 1.7; color: var(--fg-3); }
+.cmx-tip-row b { color: var(--fg); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ---- 图例 ---- */
+.cmx-legend {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  font-size: 10.5px; color: var(--fg-4);
+}
+.cmx-lg-t { font-weight: 600; color: var(--fg-3); }
+.cmx-lg-grad {
+  width: 76px; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, rgb(238,228,232), rgb(150,57,74));
+}
+.cmx-lg-e { font-size: 10px; }
+.cmx-lg-sp { flex: 1; min-width: 8px; }
+.cmx-lg-note { color: var(--fg-4); font-style: normal; }
+
+/* 窄屏：维度列收窄、字号降一档，避免格子挤成一列数字 */
+@media (max-width: 1240px) {
+  .cmx { grid-template-columns: 96px repeat(5, minmax(0, 1fr)) 50px; }
+  .cmx-hcol-n { font-size: 9.5px; }
+  .cmx-v { font-size: 12px; }
+}
+@media (max-width: 900px) {
+  .cmx-wrap { padding: 12px 10px; overflow-x: auto; }
+  .cmx { min-width: 620px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmx-hcol, .cmx-cell { transition: none; }
+}
+
+/* ===========================================================================
+ * 视图切换的过渡（pg-viewfade）
+ *
+ * 【克制的原因】
+ * 归因页两张卡各有 6 个视图，共存于同一块版式区域。切换是整块替换，
+ * 不加过渡会闪一下；但过渡做重了更糟 —— 这个页面在复盘会上会被
+ * 反复切着讲，每次 400ms 的放大回弹会积累成明显的拖沓感。
+ * 所以只做「透明度 0→1 + 上移 4px→0」，180ms 结束。
+ * 它传达的信息只有一个："这块内容换过了"。
+ * =========================================================================== */
+.pg-viewfade {
+  animation: pg-viewfade-in 180ms var(--ease-out) both;
+}
+@keyframes pg-viewfade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: none; }
+}
+/* 降动效偏好下直接出现 —— 前庭敏感的用户对"整块位移"反应最明显，
+   而这里位移本身不携带任何信息。 */
+@media (prefers-reduced-motion: reduce) {
+  .pg-viewfade { animation: none; }
+}

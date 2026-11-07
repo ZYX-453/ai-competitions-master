@@ -357,11 +357,25 @@ export interface SentimentData {
   dimensions?: SentimentDim[]
 }
 
+/** 一条画像结论附带的原始评论证据。
+ *  matched 是这条评论里命中该信号的那个词，用于在原话里高亮。 */
+export interface PersonaQuote {
+  id?: string
+  text: string
+  rating?: number
+  matched?: string
+}
+
 export interface PersonaItem2 {
   signal: string
   n: number
   pct: number
-  quote?: string
+  /* 【字段名必须是 quotes，不能是 quote】
+     后端给的是数组（每个信号可能配多条原话，元素含 id/text/rating/matched）。
+     早先这里写成 quote?: string 单数，读 `it.quote` 永远是 undefined，
+     于是画像卡上的"原话证据"一整片从来没渲染过 —— 不报错、不留空框，
+     看起来就像"这一页本来就不带证据"。这是本项目反复出现的同一类静默失效。 */
+  quotes?: PersonaQuote[]
   matched?: string
 }
 

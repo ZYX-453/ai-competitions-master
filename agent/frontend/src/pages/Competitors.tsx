@@ -18,9 +18,10 @@
  * =========================================================================== */
 import { useEffect, useState } from 'react'
 import { getJson } from '../lib/sse'
-import type { CompetitorData, CompDim } from '../lib/pages'
+import type { CompetitorData } from '../lib/pages'
 import { Card, Stat, Bar, Empty, Loading, Fail, nf, pp } from '../components/PageKit'
 import { useTip } from '../components/BiKit'
+import { CompMatrix } from '../components/CompMatrix'
 
 export function Competitors({
   categories, category, setCategory,
@@ -38,7 +39,6 @@ export function Competitors({
      加载完渲染 6 个 —— React #310（hook 数量前后不一致）当场白屏。
      规则：hooks 全部置顶，与数据的派生计算留在出口之后。 */
   const [sel, setSel] = useState<string | null>(null)
-  const [curDot, setCurDot] = useState<{ dim: string; ent: string } | null>(null)
   const tip1 = useTip()
   const tip3 = useTip()
 
@@ -72,52 +72,12 @@ export function Competitors({
      把这两个问题合成一张图：点的位置给距离，实心/空心给显著性。 */
   const maxNeg = Math.max(...d.entities.map((e) => e.neg_pct), d.us_neg_pct) * 1.12
 
-  /* ---- 模块②维度分布条的 roving cursor ----
-     6 行 × 5 点 = 30 个点。逐点 tabIndex 会产生 30 个停靠点，
-     Tab 序列直接爆掉；整类只留**一个**真焦点停靠点（游标点），
-     方向键把焦点真的搬去下一个点（不是只挪样式游标 ——
-     键盘可达探针验的是 document.activeElement 有没有变）。 */
-  const stripDims: CompDim[] = [...d.dimensions].sort((a, b) => b.spread - a.spread)
-  const maxDim = Math.max(...d.dimensions.map((x) => x.max), 1) * 1.06
-  /* 【停靠点必须落在"可操作"的点上】
-     第一行的 by_entity[0] 恰好是本店（不可点、无 role），
-     默认游标落它上面的话，24 个竞品点全是 -1 —— 键盘可达探针
-     会判"整类不可达"。home 取第一个可点（非本店）的点。 */
-  const homeDot = (() => {
-    for (const x of stripDims) {
-      const b = x.by_entity.find((e) => !e.is_us)
-      if (b) return { dim: x.label, ent: b.entity }
-    }
-    return null
-  })()
-  const tabDot = curDot && stripDims.some((x) => x.label === curDot.dim
-    && x.by_entity.some((b) => b.entity === curDot.ent))
-    ? curDot
-    : homeDot
-
-  const moveStrip = (e: React.KeyboardEvent, ri: number, ei: number) => {
-    const dir: Record<string, [number, number]> = {
-      ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0],
-    }
-    const mv = dir[e.key]
-    if (!mv) return false
-    e.preventDefault()
-    let nr = ri + mv[0]
-    let nc = ei + mv[1]
-    while (nr >= 0 && nr < stripDims.length && nc >= 0 && nc < stripDims[nr].by_entity.length) {
-      const b = stripDims[nr].by_entity[nc]
-      if (b) {
-        setCurDot({ dim: stripDims[nr].label, ent: b.entity })
-        // 【焦点必须真搬过去】只改 state 的话 activeElement 不变，
-        // 探针和读屏都认为焦点没动 —— 键盘用户等于没走。
-        const t = document.getElementById(`pg-dot-${stripDims[nr].label}-${b.entity}`)
-        t?.focus()
-        return true
-      }
-      nr += mv[0]; nc += mv[1]
-    }
-    return true
-  }
+  /* 【维度矩阵已经接管了「差在哪、差多少」】
+     原来这里有一整套 roving-tabindex 游标 + 点线分布条（stripDims /
+     maxDim / tabDot / moveStrip），现由 CompMatrix 组件替代：
+     矩阵把 6 维 × 5 家铺成格子，行内归一着色，点一处即高亮整行整列，
+     键盘焦点直接落在列头上（5 个停靠点，而不是 30 个）。
+     维度的排序与极值计算下沉到组件内部，这里不再保留。 */
 
   /* ---- 模块③蝴蝶图 ----
      【log₂ 比天然是双向的】正数偏向本店、负数偏向对标，
@@ -352,75 +312,9 @@ export function Competitors({
         note={<>每个维度先筛出<b>提到该维度</b>的评论，再看其中的负评率。分母是提及数，不是总评论数。</>}
         pad={false}
       >
-        {d.dimensions.length === 0 ? (
-          <Empty what="没有维度差距数据" />
-        ) : (
-          /* ---- 维度分布条（BI）----
-             【为什么不用雷达图】雷达图四条线叠一个多边形，只能看出"谁包住谁"，
-             看不出差几个点也排不了序（页头注释里踩过）。分布条把每个维度的
-             5 家值摊在一根轴上：范围线给"最好到最差有多宽"（越大越值得管），
-             点给"每家在哪"，本店实心圈 —— 差距和位置一张图读完。 */
-          <div
-            className="pg-dstrip"
-            role="group"
-            aria-label={`维度差距分布，按差距从大到小共 ${stripDims.length} 个维度；方向键移动查看每家数值，回车选中该竞品联动全局`}
-            onKeyDown={(ev) => {
-              const cur = tabDot
-              if (!cur) return
-              const ri = stripDims.findIndex((x) => x.label === cur.dim)
-              const row = stripDims[ri]
-              const ei = row ? row.by_entity.findIndex((b) => b.entity === cur.ent) : -1
-              if (moveStrip(ev, ri, ei)) return
-              if (ev.key === 'Enter' || ev.key === ' ') {
-                ev.preventDefault()
-                const b = row?.by_entity[ei]
-                if (b && !b.is_us) setSel((c) => (c === b.entity ? null : b.entity))
-              }
-            }}
-          >
-            {stripDims.map((x) => (
-              <div className="pg-dstrip-r" key={x.label}>
-                <span className="pg-dstrip-l">{x.label}</span>
-                <span className="pg-dstrip-t">
-                  <i className="pg-dstrip-range" style={{
-                    left: `${(x.min / maxDim) * 100}%`,
-                    width: `${((x.max - x.min) / maxDim) * 100}%`,
-                  }} />
-                  {x.by_entity.map((b) => {
-                    const isCur = tabDot?.dim === x.label && tabDot?.ent === b.entity
-                    const dimmed = !!sel && !b.is_us && sel !== b.entity
-                    return (
-                      <i
-                        key={b.entity}
-                        id={`pg-dot-${x.label}-${b.entity}`}
-                        role={b.is_us ? undefined : 'button'}
-                        /* 【roving：只有游标点可聚焦】其余 -1，
-                           方向键把焦点搬过去（见 onKeyDown → moveStrip）。 */
-                        tabIndex={isCur ? 0 : -1}
-                        aria-label={b.is_us
-                          ? `本店在${x.label}的负评率 ${b.value.toFixed(1)}%`
-                          : `${b.entity}在${x.label}的负评率 ${b.value.toFixed(1)}%，${b.value === x.max ? '本维度最差' : ''}回车选中联动全局`}
-                        className={`pg-dstrip-d${b.is_us ? ' is-us' : ''}${b.value === x.max ? ' is-worst' : ''}${dimmed ? ' is-dim' : ''}${sel === b.entity ? ' is-on' : ''}${isCur ? ' is-cur' : ''}`}
-                        style={{ left: `${(b.value / maxDim) * 100}%` }}
-                        title={`${b.entity}：${b.value.toFixed(1)}%`}
-                        onFocus={() => setCurDot({ dim: x.label, ent: b.entity })}
-                        onClick={!b.is_us
-                          ? () => setSel((c) => (c === b.entity ? null : b.entity))
-                          : undefined}
-                      />
-                    )
-                  })}
-                </span>
-                <span className="pg-dstrip-s num">{x.spread.toFixed(1)}<small>pp</small></span>
-                <span className="pg-dstrip-wb">
-                  <b className="t-bad">{x.worst}</b>
-                  <span className="dim"> → </span>
-                  <b className="t-good">{x.best}</b>
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
+        {d.dimensions.length === 0
+          ? <Empty what="没有维度差距数据" />
+          : <CompMatrix data={d} sel={sel} setSel={setSel} />}
       </Card>
 
       {/* ---- 用词差异 ---- */}

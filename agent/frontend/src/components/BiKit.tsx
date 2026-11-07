@@ -113,17 +113,47 @@ export function Segmented<T extends string>({
   onChange: (v: T) => void
   label?: string
 }) {
+  /* 【role="tablist" 是承诺，不只是标签】
+     这套控件声明了 tab / tablist，就必须按 ARIA 的 tabs 模式行事：
+       · 只有当前项 tabIndex=0，其余 -1（整组一个 Tab 停靠点）；
+       · ←/→ 在组内移动并**立即切换**（tabs 与 radio 不同，
+         不要求先 Enter 再确认 —— 切换成本低，改回来也便宜）；
+       · Home / End 跳到首尾。
+     原来只有 role 和 aria-selected，方向键完全没接，
+     键盘用户按 ← → 毫无反应，只能一路 Tab 过去 ——
+     而且因为没做 roving，6 个视图会占掉 6 个 Tab 位。
+     实现方式刻意不用 state 存"当前焦点项"：在 tabs 模式下
+     焦点项恒等于选中项，多存一份必然会有对不上的时候。 */
+  const move = (e: React.KeyboardEvent, i: number) => {
+    const n = options.length
+    if (!n) return
+    let j: number | null = null
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') j = (i + 1) % n
+    else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') j = (i - 1 + n) % n
+    else if (e.key === 'Home') j = 0
+    else if (e.key === 'End') j = n - 1
+    if (j === null) return
+    e.preventDefault()
+    onChange(options[j].key)
+    /* 焦点搬家：光切 onChange 的话 activeElement 还在旧按钮上，
+       下一次按方向键会从旧位置继续，用户感觉"卡住了"。 */
+    const next = e.currentTarget.parentElement?.children[j] as HTMLElement | undefined
+    next?.focus()
+  }
+
   return (
     <div className="bi-seg-wrap">
       {label && <span className="bi-seg-label">{label}</span>}
-      <div className="bi-seg" role="tablist">
-        {options.map((o) => (
+      <div className="bi-seg" role="tablist" aria-label={label}>
+        {options.map((o, i) => (
           <button
             key={o.key}
             role="tab"
             aria-selected={o.key === value}
+            tabIndex={o.key === value ? 0 : -1}
             className={`bi-seg-i${o.key === value ? ' on' : ''}`}
             onClick={() => onChange(o.key)}
+            onKeyDown={(e) => move(e, i)}
           >
             {o.label}
           </button>
