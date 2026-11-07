@@ -552,7 +552,17 @@
 
   /* ================================================================ 登录门
      粉白报告风的居中登录卡。会话内登录一次即可（sessionStorage），
-     通过后整层淡出露出应用；不校验真实口令，仅作为演示门面。 */
+     通过后整层淡出露出应用。
+
+     【这一层不校验口令，所以必须把这件事写在脸上】
+     它原本长着一个真的登录页的样子：账号 / 密码 / 忘记密码 / 隐私协议，
+     但 done() 只判断两个框非空，随便填什么都能进。这个落差会直接坑到人：
+       · 有人把真口令输进去（想过一道正经门），其实没必要冒这个险；
+       · 更多人点了「忘记密码」，弹出一句「请联系管理员重置密码」——
+         而根本不存在管理员，也没有密码可重置，这句话是纯死胡同；
+       · 少数人会以为"我是不是没权限"，就此放弃。
+     所以删掉「忘记密码」这个假出口，改成一行明确的提示语。
+     一个演示门面可以简，但不能假装自己有它没有的能力。 */
   function initLoginGate() {
     if (sessionStorage.getItem('cj-login') === '1') return;
     const ov = document.createElement('div');
@@ -561,11 +571,11 @@
       `<div class="gl-card">` +
       `<div class="gl-brand">澄鉴</div>` +
       `<div class="gl-sub">以循证之链，释一周异动之因</div>` +
-      `<div class="gl-field"><input type="text" placeholder="账号" autocomplete="username"></div>` +
-      `<div class="gl-field"><input type="password" placeholder="密码" autocomplete="current-password"></div>` +
-      `<div class="gl-err">请输入账号和密码</div>` +
-      `<button class="gl-btn">登录</button>` +
-      `<div class="gl-foot"><a href="javascript:void(0)" class="gl-forgot">忘记密码</a><span>·</span><a href="javascript:void(0)">隐私协议</a></div>` +
+      `<div class="gl-field"><input type="text" placeholder="账号（任意）" autocomplete="username"></div>` +
+      `<div class="gl-field"><input type="password" placeholder="密码（任意）" autocomplete="current-password"></div>` +
+      `<div class="gl-err">两个框都要填，填什么都可以</div>` +
+      `<button class="gl-btn">登 录</button>` +
+      `<div class="gl-hint">演示环境 · 不校验口令，任意账号密码直接进入</div>` +
       `</div>`;
     document.body.appendChild(ov);
     const userInput = ov.querySelectorAll('input')[0];
@@ -573,7 +583,7 @@
     const err = ov.querySelector('.gl-err');
     const fail = (msg) => { err.textContent = msg; err.classList.add('on'); };
     const done = () => {
-      if (!userInput.value.trim() || !passInput.value.trim()) { fail('请输入账号和密码'); return; }
+      if (!userInput.value.trim() || !passInput.value.trim()) { fail('两个框都要填，填什么都可以'); return; }
       sessionStorage.setItem('cj-login', '1');
       ov.classList.add('bye');
       setTimeout(() => ov.remove(), 480);
@@ -582,8 +592,6 @@
     ov.addEventListener('keydown', (e) => { if (e.key === 'Enter') done(); });
     [userInput, passInput].forEach((i) =>
       i.addEventListener('input', () => err.classList.remove('on')));
-    ov.querySelector('.gl-forgot').addEventListener('click', () =>
-      fail('请联系管理员重置密码'));
     setTimeout(() => userInput.focus(), 60);
   }
 

@@ -1696,13 +1696,15 @@ body:has(.pg-kpi-row) {
 }
 .gl-btn:hover { filter: brightness(1.04); transform: translateY(-1px); }
 .gl-btn:active { transform: none; filter: brightness(.98); }
-.gl-foot {
-  margin-top: 20px;
-  display: flex; justify-content: center; align-items: center; gap: 8px;
-  font-size: 11.5px; color: #C0A8AE;
+/* 【常驻提示行，不是错误态】
+   它是这一层唯一一句实话（"不校验口令"），所以不能等出错才出现——
+   gl-err 是 display:none 到 .on 才显示，这里是常显的浅灰小字。
+   颜色刻意比 gl-err 淡：它要 readable 但不要抢眼，否则人人以为出了岔子。 */
+.gl-hint {
+  margin-top: 16px; text-align: center;
+  font-size: 11.5px; line-height: 1.6; color: #B9A3A9;
+  letter-spacing: .2px;
 }
-.gl-foot a { color: #A98890; text-decoration: none; transition: color .15s ease; }
-.gl-foot a:hover { color: #8A6A73; }
 
 /* ================================================================ 退货原因 · 交互桑基
    左侧原因导航 ｜ 中间流动桑基连线（渐变光流 + 动态箭头）
