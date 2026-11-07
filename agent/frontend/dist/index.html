@@ -7,16 +7,24 @@
     <meta name="color-scheme" content="only light">
     <title>澄鉴 · 归因诊断 Agent</title>
     <meta name="description" content="以循证之链，释一周异动之因" />
+
     <!-- 【glass.css / glass.js 必须在这里引用，不能只在 dist 里手工加】
-         这两个文件是 v20261106zw 的粉白主题层与交互增强层（登录门、数字滚动、
+         这两个文件是 v20261106zw 的主题强化层与交互增强层（登录门、数字滚动、
          蝴蝶图对齐、画像重排）。它们原先只存在于 dist/，而 `vite build`
-         会先清空 dist —— 结果就是"本地看着好好的，重新构建一次主题全丢"：
-         页面退回紫色默认皮肤，登录门消失，右栏对齐错乱。
-         放进 public/ 并写进这份源模板，构建时才会被原样拷到 dist。 -->
-    <link rel="stylesheet" href="/glass.css?v=20261106zw">
+         会先清空 dist —— 结果就是"本地看着好好的，重新构建一次全丢"。
+         放进 public/ 并写进这份源模板，构建时才会被原样拷到 dist。
+
+         ⚠ 这里的**位置不代表最终顺序**。glass.css 里大量规则与 app.css 是
+         同一选择器、同一优先级，CSS 只认后出现的那个；而 Vite 会把打包出的
+         CSS 追加到 head 闭合标签之前，把这里写的 shell 挤到前面去。
+         实测挤到前面时 --accent 被 app.css 的 #f2f2f3 覆盖，整层失效。
+         所以顺序由 vite.config.ts 里的 glassCssLast 插件在构建后重排，
+         不要在源模板里用 media="print" 之类的技巧去凑——那只是碰运气。 -->
     <script src="/glass.js?v=20261106zw" defer></script>
+    
     <script type="module" crossorigin src="/assets/index-BkxQ9YQs.js"></script>
     <link rel="stylesheet" crossorigin href="/assets/index-3wNUm_j7.css">
+    <link rel="stylesheet" href="/glass.css?v=20261106zw">
   </head>
   <body>
     <div id="root"></div>

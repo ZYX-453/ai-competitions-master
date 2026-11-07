@@ -169,3 +169,9 @@ htmlcov/_tmp_clone/
 # 用途只是"我确认这一版真的渲染出来了"，不是交付物，也不被任何文档引用。
 # 正式交付的图表在 reports/figs/，那批是受版本管理的。
 outputs/_shots/
+
+# 【Vite 每次加载 vite.config.ts 都会吐一个带时间戳的临时副本】
+# 形如 vite.config.ts.timestamp-1793618703084-*.mjs，是 esbuild 的中间产物。
+# 它只在配置变更后出现，很容易被 `git add -A` 顺手带进仓库
+# （本仓库已经误提交了 7 个）。没有任何用途，删掉不影响构建。
+vite.config.ts.timestamp-*.mjs
