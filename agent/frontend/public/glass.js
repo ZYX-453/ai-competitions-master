@@ -512,11 +512,7 @@
       `<div class="ps2-top">` +
       `<div class="ps2-intro"><img src="${PERSONA_IMG}" alt="典型用户画像" />` +
       `<div class="ps2-intro-t">评论侧写 · 典型画像<span>由评论文本归纳，非人口属性</span></div></div>` +
-      `<div class="ps2-warn"><b>这组画像回答不了什么</b><ul>` +
-      `<li><em>年龄、性别、收入、城市</em>——评论里没有这些信息，任何「画像」里出现这几项都是编的</li>` +
-      `<li><em>未评论用户的行为</em>——这里是评论样本，不是全部购买用户，沉默的大多数没有出现在这里</li>` +
-      `<li><em>人群占比的代表性</em>——评论者的构成和购买者不一定一致（爱写评论的人本身就偏极端）</li>` +
-      `</ul></div></div>` +
+      `</div>` +
       `<div class="ps2-grid">` +
       groups.map((g, gi) => {
         const maxN = Math.max(...g.items.map((i) => i.n), 1);

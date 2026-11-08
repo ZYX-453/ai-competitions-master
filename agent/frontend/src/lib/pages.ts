@@ -388,7 +388,6 @@ export interface PersonaGroup2 {
 export interface PersonaData {
   ok?: boolean
   groups?: PersonaGroup2[]
-  cannot?: string[]
   top_signals?: { signal: string; n: number; pct: number }[]
   rating_dist?: Record<string, number>
   n?: number

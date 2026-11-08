@@ -291,7 +291,7 @@ def review_wordcloud(entity: str | None = None, category: str | None = None,
 
 def review_persona(entity: str | None = None, category: str | None = None,
                    source: str | None = None) -> ToolResult:
-    """从评论语言里提取用户画像（带原话证据，并明确写出"回答不了什么"）。"""
+    """从评论语言里提取用户画像（带原话证据）。"""
     d = _slice(entity, category, source)
     if d.empty:
         return ToolResult(ok=False, error=_miss(entity, category, source))

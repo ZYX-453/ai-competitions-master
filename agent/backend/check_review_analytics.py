@@ -275,11 +275,9 @@ def run_persona(corpus) -> None:
     check('每个信号都带原话', not no_quote,
           '全部有证据' if not no_quote else str(no_quote[:3]))
 
-    # 【"不能说"的清单必须存在且非空】
-    # 这是这个模块的诚信设计：明写"这些画不出来"。
-    # 缺了它，画像就等于暗示自己能回答人群构成。
-    check('明写"不能回答什么"', len(r.get('cannot', [])) >= 3,
-          f"{len(r.get('cannot', []))} 条")
+    # 【"不能说"的清单已按产品要求从接口中移除，这里不再断言】
+    # 对应的防误读手段改为画像块副标题的固定文案
+    # 「由评论文本归纳，非人口属性」。
 
     check('星级分布齐全', len(r.get('rating_dist', {})) == 5,
           str(r.get('rating_dist')))
@@ -446,7 +444,7 @@ def run_contract() -> None:
     need = {
         'review_sentiment': ['ok', 'n', 'neg_pct', 'pos_pct', 'net_sentiment'],
         'review_wordcloud': ['ok', 'items', 'rank_by', 'rank_note'],
-        'review_persona': ['ok', 'groups', 'top_signals', 'cannot'],
+        'review_persona': ['ok', 'groups', 'top_signals'],
         'competitor_compare': ['ok', 'entities', 'contrast', 'dim_spread'],
         # 【这一条就是抓 bug 的那一条】
         # collector_status 原来 data 里没有 ok，

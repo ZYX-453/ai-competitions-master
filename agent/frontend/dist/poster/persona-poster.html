@@ -51,8 +51,10 @@
   .d4 { width: 8px;  height: 8px;  background: rgba(228,184,142,.55); bottom: 34px; left: 30px; }
   .d5 { width: 13px; height: 13px; background: rgba(217,138,147,.3);  bottom: 28px; right: 26px; }
 
-  /* ===== 顶部两卡 ===== */
-  .top { display: grid; grid-template-columns: 460px 1fr; gap: 20px; }
+  /* ===== 顶部标题卡 =====
+     原为两列 460px + 1fr（左标题、右边界提示）。提示卡删除后
+     仍用两列会让标题卡只占 460px、右侧空一片，故改单列。 */
+  .top { display: grid; grid-template-columns: 1fr; gap: 20px; }
   .card {
     background: var(--bg2);
     border-radius: 24px;
@@ -66,19 +68,6 @@
     margin-right: 12px; vertical-align: -3px;
   }
   .card-sub { font-size: 14px; color: var(--muted); margin-top: 8px; }
-  .warn-title { font-size: 19px; font-weight: 800; color: var(--accent); }
-  .warn-list { margin-top: 12px; display: grid; gap: 9px; }
-  .warn-list li {
-    list-style: none; position: relative;
-    font-size: 13.5px; line-height: 1.72; color: #6E5A5F;
-    padding-left: 22px;
-  }
-  .warn-list li::before {
-    content: ''; position: absolute; left: 2px; top: 9px;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--accent); opacity: .55;
-  }
-  .warn-list b { color: var(--ink); font-weight: 700; }
 
   /* ===== 中间插画 ===== */
   .hero { position: relative; height: 356px; margin: 20px 0; display: flex; justify-content: center; }
@@ -124,19 +113,11 @@
 <div class="poster">
   <i class="dot d1"></i><i class="dot d2"></i><i class="dot d3"></i><i class="dot d4"></i><i class="dot d5"></i>
 
-  <!-- 顶部：标题卡 + 边界提示卡 -->
+  <!-- 顶部：标题卡（原右侧"边界提示卡"已按产品要求删除，改为单列铺满） -->
   <div class="top">
     <div class="card">
       <div class="card-title"><span class="bar-accent"></span>评论侧写 · 典型画像</div>
       <div class="card-sub">由评论文本归纳，非人口属性</div>
-    </div>
-    <div class="card">
-      <div class="warn-title">这组画像回答不了什么</div>
-      <ul class="warn-list">
-        <li><b>年龄、性别、收入、城市</b>——评论里没有这些信息，任何"画像"里出现这几项都是编的</li>
-        <li><b>未评论用户的行为</b>——这里是评论样本，不是全部购买用户，沉默的大多数没有出现在这里</li>
-        <li><b>人群占比的代表性</b>——评论者的构成和购买者不一定一致（爱写评论的人本身就偏极端）</li>
-      </ul>
     </div>
   </div>
 

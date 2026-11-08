@@ -648,7 +648,6 @@ html body::before {
   background: linear-gradient(90deg, rgba(35,104,114,.55), #236872);
 }
 .pg-ps-quote { font-size: 12px !important; line-height: 1.8 !important; }
-.pg-cannot { font-size: 12px !important; }
 
 /* ---------------------------------------------------------------- 全局字号上调 */
 /* 玻璃主题整体字号偏小，基准从 ~12.5px 提到 14px */
@@ -1509,7 +1508,10 @@ body:has(.pg-kpi-row) {
   display: grid;
   gap: 16px;
 }
-.app .ps2-top { display: grid; grid-template-columns: 1fr 1.3fr; gap: 16px; }
+/* 【这里原本是两列：左边简介卡、右边边界提示清单】
+   该清单已按产品要求删除，只剩简介卡。若仍保留 1fr 1.3fr，
+   卡片会只占左侧约 43%，右边留一片空白 —— 所以改成单列铺满。 */
+.app .ps2-top { display: grid; grid-template-columns: 1fr; gap: 16px; }
 .app .ps2-intro {
   background: rgba(255, 255, 255, .92);
   border-radius: 16px;
@@ -1527,24 +1529,6 @@ body:has(.pg-kpi-row) {
 }
 .app .ps2-intro-t { font-size: 17px; font-weight: 700; color: #5C4149; line-height: 1.5; }
 .app .ps2-intro-t span { display: block; margin-top: 6px; font-size: 12.5px; font-weight: 500; color: #B0949B; letter-spacing: .5px; }
-.app .ps2-warn {
-  background: rgba(255, 255, 255, .78);
-  border: 1px dashed rgba(217, 138, 147, .45);
-  border-radius: 16px;
-  padding: 16px 18px;
-}
-.app .ps2-warn b { display: block; font-size: 13.5px; color: #C25B6A; margin-bottom: 10px; letter-spacing: .5px; }
-.app .ps2-warn ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.app .ps2-warn li {
-  position: relative; padding-left: 16px;
-  font-size: 12.5px; color: #7A6268; line-height: 1.65;
-}
-.app .ps2-warn li::before {
-  content: ''; position: absolute; left: 0; top: 7px;
-  width: 6px; height: 6px; border-radius: 50%;
-  background: #E7A3AA;
-}
-.app .ps2-warn li em { font-style: normal; font-weight: 650; color: #8A5A64; }
 .app .ps2-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .app .ps2-card {
   background: rgba(255, 255, 255, .92);
@@ -2772,14 +2756,6 @@ body:has(.app.app-chat)::after {
 }
 .app .ps2-intro-t { color: #3E3550; }
 .app .ps2-intro-t span { color: #8B8598; }
-.app .ps2-warn {
-  border: 1px dashed rgba(124, 104, 200, .45);
-  background: rgba(255, 255, 255, .8);
-}
-.app .ps2-warn b { color: #5B4A9E; }
-.app .ps2-warn li { color: #5D5670; }
-.app .ps2-warn li::before { background: #A99BDD; }
-.app .ps2-warn li em { color: #4A4360; }
 .app .ps2-card {
   box-shadow: 0 8px 24px -16px rgba(90, 70, 140, .30);
 }

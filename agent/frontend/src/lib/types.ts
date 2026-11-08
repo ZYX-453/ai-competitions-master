@@ -146,8 +146,6 @@ export interface PersonaBlock {
   type: 'persona'
   title?: string
   groups?: PersonaGroup[]
-  /** 这份画像明确回答不了的问题（如年龄/性别/收入） */
-  cannot?: string[]
 }
 
 export interface ContrastItem {

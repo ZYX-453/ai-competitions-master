@@ -269,13 +269,6 @@ export function PersonaBoard({ data }: { data: PersonaData }) {
           })}
         </div>
       </div>
-
-      {!!data.cannot?.length && (
-        <div className="psb-cannot">
-          <b>这组画像回答不了什么</b>
-          <ul>{data.cannot.map((c, i) => <li key={i}>{c}</li>)}</ul>
-        </div>
-      )}
     </div>
   )
 }
