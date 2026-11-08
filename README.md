@@ -1,4 +1,4 @@
-# 差评炼金炉 · 归因诊断 Agent
+# 差评溯源 · 归因诊断 Agent
 
 > 第一届中国 AI 管理实践挑战赛 ｜ 赛道一 ｜ 市场营销与客户洞察
 
@@ -37,7 +37,7 @@ python -m uvicorn main:app --port 8848
 
 | 平台 | 入口 | 说明 |
 |---|---|---|
-| Windows | 双击 `启动澄鉴.bat` | 唯一入口。`agent/start.bat` 只是转发到这里 |
+| Windows | 双击 `启动差评溯源.bat` | 唯一入口。`agent/start.bat` 只是转发到这里 |
 | Git Bash / macOS / Linux | `bash agent/start.sh` | 同一套逻辑的 bash 版 |
 
 两个 `.bat` 都存为 **GBK + CRLF**。这是踩出来的：cmd.exe 解析批处理时用的是打开文件那一刻的

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 差评炼金炉 · 启动脚本（bash / Git Bash / macOS / Linux）
+# 差评溯源 · 启动脚本（bash / Git Bash / macOS / Linux）
 # Windows 用户双击 start.bat 即可，不必用这个。
 
 set -euo pipefail

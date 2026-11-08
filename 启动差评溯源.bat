@@ -1,9 +1,9 @@
 @echo off
 rem ===========================================================================
-rem  澄鉴 · 一键启动（Windows 唯一入口）
+rem  差评溯源 · 一键启动（Windows 唯一入口）
 rem
 rem  【为什么只保留这一个 .bat】
-rem  历史上并存三个入口：根目录的「启动澄鉴.bat」、agent\start.bat、agent\start.sh。
+rem  历史上并存三个入口：根目录的「启动差评溯源.bat」、agent\start.bat、agent\start.sh。
 rem  三份逻辑各不相同，于是同一个问题在三处的表现也不一样：
 rem    · agent\start.bat 是 GBK 编码且没有 chcp，在 UTF-8 终端里全是乱码，
 rem      而它恰好是 README 让用户双击的那个；
@@ -49,7 +49,7 @@ rem ④ 最后交给 PATH 里的 python
 if not defined PY set "PY=python"
 
 echo.
-echo   澄鉴 · 归因诊断 Agent
+echo   差评溯源 · 归因诊断 Agent
 echo   解释器：%PY%
 echo   端口：  http://127.0.0.1:%PORT%
 echo.

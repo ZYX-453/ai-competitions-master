@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""差评炼金炉 · FastAPI 服务
+"""差评溯源 · FastAPI 服务
 
 三个端点：
   GET  /api/health          健康检查 + 当前推理模式 + 可用工具清单
@@ -37,7 +37,7 @@ from orchestrator import TOOL_SCHEMA, TOOL_TITLE, get_agent
 from tools.data_hub import get_hub
 
 app = FastAPI(
-    title='差评炼金炉 · 归因诊断 Agent',
+    title='差评溯源 · 归因诊断 Agent',
     description='把「这周差评为什么涨了」变成一条带证据的归因链',
     version='1.0.0',
 )

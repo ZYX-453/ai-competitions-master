@@ -569,7 +569,7 @@
     ov.className = 'glass-login';
     ov.innerHTML =
       `<div class="gl-card">` +
-      `<div class="gl-brand">澄鉴</div>` +
+      `<div class="gl-brand">差评溯源</div>` +
       `<div class="gl-sub">以循证之链，释一周异动之因</div>` +
       `<div class="gl-field"><input type="text" placeholder="账号（任意）" autocomplete="username"></div>` +
       `<div class="gl-field"><input type="password" placeholder="密码（任意）" autocomplete="current-password"></div>` +
@@ -1030,14 +1030,34 @@
     const es = s => String(s).replace(/[&<>"]/g, ch =>
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
     const W = small ? 480 : 640, H = small ? 500 : 580;
-    const CX = W / 2, CY = H / 2 + 4, R = small ? 50 : 84;
+    /* 【半径必须跟着字号走，不能各写各的】
+       小版原来 R=50（直径 100px）。实测三行文字需要：
+         「第 44 周」43px · 「差评诊断」64px · 「6 大原因 · 合计 99.9%」86px
+       最宽那行 86px 塞进 100px 直径后，该行所在高度的圆弧弦宽只有约 92px，
+       两侧各剩 3px —— 这就是"字贴着圆边、像要溢出去"的来历。
+       取 R=64（直径 128px）后，最窄处的侧余量 14px、上下余量 34/36px，
+       三行间距各 6px，分布均衡。逐档试算过 58/62/64/66，
+       58 只剩 8px、66 会把中间的圆推到挤压分支，64 是拐点。
+       基线分配（小版 t1=CY-19 / t2=CY+6 / t3=CY+26）与这张表同步，
+       改一个必须改另一个，否则"圆变大了字还挤在中间"或"字顶到圆外"必犯其一。 */
+    const CX = W / 2, CY = H / 2 + 4, R = small ? 64 : 84;
     /* 位置槽：降序原因左右对称铺开（0右上 1左上 2右中 3左中 4右下 5左下）。
        大版上排 y=136：压在右侧动作明细表（页面顶部 ~170px 内有行文字）下方，避免挡字 */
     const SLOTS = [{ s: 1, r: 0 }, { s: -1, r: 0 }, { s: 1, r: 1 }, { s: -1, r: 1 }, { s: 1, r: 2 }, { s: -1, r: 2 }];
     const rowYs = small ? [72, CY, 430] : [136, CY, 468];
     wrap.classList.add('glass-radial');
     if (small) wrap.classList.add('sm');   /* classList.add 不接受含空格的 token */
-    wrap.style.cssText = 'height:' + H + 'px;min-width:' + W + 'px;';
+    /* 【容器宽度不能写死成 W】
+       原来是 min-width:W（小版 480px），可它插在 .pg-plan-rank 左栏里，
+       而左栏只有 34% 宽（1440px 视口下约 470px）——
+       图比栏还宽，于是整块向右溢进右栏的动作表格，被表格盖住。
+       这正是用户截图里"原因卡压在表格上、表格的字被挡掉半截"的成因。
+       现在只给高度，宽度交给 CSS（.pg-plan-rank .glass-radial{width:100%}）；
+       SVG 用 viewBox + preserveAspectRatio 等比缩放，
+       .gr-node 是绝对定位的 DOM 子元素，跟着 wrap 的百分比位置走。 */
+    wrap.style.cssText = 'height:' + H + 'px;';
+    /* 让节点的水平锚点随容器宽度伸缩：左右两列分别贴 0 和 100%，
+       不再用写死的 px（W-146 / 6）。见下面 node.style.cssText 处。 */
 
     const svg = svgEl('svg', { viewBox: '0 0 ' + W + ' ' + H, width: W, height: H, 'class': 'gr-svg' }, wrap);
     const cg = svgEl('defs', {}, svg);
@@ -1048,13 +1068,24 @@
     svgEl('circle', { cx: CX, cy: CY, r: R + 15, fill: 'none', stroke: '#C9BCE8',
       'stroke-width': 1.3, 'stroke-dasharray': '2 6', 'class': 'gr-ring' }, svg);
     svgEl('circle', { cx: CX, cy: CY, r: R, fill: 'url(#gr-cg)', 'class': 'gr-core' }, svg);
+    /* 【文字层单独一个 <g>，最后再 append 到最上层】
+       这是本轮真正的修法。前一步已经把分支起点挪到圆外，但那只是治标：
+       分支是贝塞尔曲线，中间行（rowYs[1] = CY）从圆周外水平出发、
+       还要向内弯，控制点在 R+40 —— 它仍可能擦到圆内文字带的边缘。
+       而 SVG 没有 z-index，绘制顺序就是层叠顺序，分支晚于文字创建
+       就永远压在文字上面。
+       所以这里先建一个空的 <g> 占位，等分支都画完（见函数末尾）
+       再把文字塞进去并把它移到 svg 最后一个子节点。 */
+    const textLayer = svgEl('g', { 'class': 'gr-textlayer' }, svg);
     const wk = (document.body.textContent.match(/第\s*(\d+)\s*周/) || [])[1] || '44';
     const total = causes.reduce((a, c) => a + (c.share || 0), 0);
-    const t1 = svgEl('text', { x: CX, y: CY - (small ? 16 : 24), 'text-anchor': 'middle', 'class': 'gr-t1' }, svg);
+    /* 三行的基线：见上面 R 那段注释里给出的分配表。必须与 R 同步改，
+       否则"圆变大了但字还挤在中间"或"字顶到圆外"两者必犯其一。 */
+    const t1 = svgEl('text', { x: CX, y: CY - (small ? 19 : 26), 'text-anchor': 'middle', 'class': 'gr-t1' }, textLayer);
     t1.textContent = '第 ' + wk + ' 周';
-    const t2 = svgEl('text', { x: CX, y: CY + (small ? 3 : 4), 'text-anchor': 'middle', 'class': 'gr-t2' }, svg);
+    const t2 = svgEl('text', { x: CX, y: CY + (small ? 6 : 5), 'text-anchor': 'middle', 'class': 'gr-t2' }, textLayer);
     t2.textContent = '差评诊断';
-    const t3 = svgEl('text', { x: CX, y: CY + (small ? 19 : 28), 'text-anchor': 'middle', 'class': 'gr-t3' }, svg);
+    const t3 = svgEl('text', { x: CX, y: CY + (small ? 26 : 30), 'text-anchor': 'middle', 'class': 'gr-t3' }, textLayer);
     t3.textContent = causes.length + ' 大原因 · 合计 ' + total.toFixed(1) + '%';
 
     /* 联动高亮：悬停分支/节点 → 该链路保持，其余淡出 */
@@ -1076,7 +1107,13 @@
       const nx = small ? CX + slot.s * (R + 96) : CX + slot.s * (R + 34);
       const ey = rowYs[slot.r];
       const sy = CY + (ey - CY) * 0.14;
-      const sx = CX + slot.s * (R - 6);
+      /* 【起笔点必须落在圆外，不能从圆里往外画】
+         原来是 R - 6，也就是从圆周**内部** 6px 处起笔。
+         path 是在中心圆和文字之后创建的，SVG 没有 z-index，
+         后创建的在上面 —— 于是六条彩色分支压在了「差评诊断」和
+         「6 大原因…」上，近距离看就是"字被线盖住了"。
+         改成 R + 2：正好贴住圆周外侧，视觉上与圆相接但压不到任何字。 */
+      const sx = CX + slot.s * (R + 2);
       const sw = +(small ? 1.8 + (c.share || 0) * 0.09 : 3 + (c.share || 0) * 0.34).toFixed(1);  /* 粗细 = 占比 */
       const path = svgEl('path', {
         d: 'M ' + sx.toFixed(1) + ' ' + sy.toFixed(1) +
@@ -1090,9 +1127,16 @@
       /* 末端原因节点：名称 + 真实损失/占比 + 核心动作标签（小版 2 个，大版 3 个） */
       const node = document.createElement('div');
       node.className = 'gr-node';
+      /* 【水平锚点用百分比，不用写死的 px】
+         原来小版写的是 left:(W-146) 和 left:6 —— 两个数都以 480 为基准。
+         容器一旦被压到 325px（左栏 34%），节点还是按 480 摆，
+         于是右列节点 left=334 跑到容器外面，正是"压在右栏表格上"的那几个。
+         改成 0 / 100% 两端贴边 + 宽度由 CSS 控制，容器多宽都成立。
+         大版的 nx 本身是 SVG 坐标系里的值，同样换算成比例。
+         纵向仍是 px：高度 H 固定，不需要换算。 */
       node.style.cssText = (slot.s > 0
-        ? (small ? 'left:' + (W - 146) + 'px;' : 'left:' + (nx + 16) + 'px;')
-        : (small ? 'left:6px;' : 'right:' + (W - nx + 16) + 'px;')) +
+        ? (small ? 'left:auto;right:0;' : 'left:' + ((nx + 16) / W * 100).toFixed(2) + '%;')
+        : (small ? 'left:0;right:auto;' : 'right:' + ((W - nx + 16) / W * 100).toFixed(2) + '%;')) +
         'top:' + (ey - (small ? 44 : 36)) + 'px;animation-delay:' + (200 + i * 110) + 'ms;';
       const acts = small ? c.def.acts.slice(0, 2) : c.def.acts;
       node.innerHTML =
@@ -1121,6 +1165,12 @@
       }, 60);
       pieces.push({ path, endC, node, baseW: sw, def: c.def });
     });
+
+    /* 【把文字层提到最上层】（必须在分支循环之后执行）
+       分支是逐条 append 到 svg 的，此刻 textLayer 排在它们**前面**，
+       会被后画的线盖住 —— 这正是"字被线压住"的直接原因。
+       appendChild 一个已存在的节点 = 把它移到末尾，DOM 标准行为，无需 clone。 */
+    svg.appendChild(textLayer);
 
     /* 粒子光流（大版专属）：光点沿分支从中心流向末端 */
     if (!small) {

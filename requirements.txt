@@ -1,4 +1,4 @@
-# 差评炼金炉 · 归因诊断 Agent
+# 差评溯源 · 归因诊断 Agent
 #
 # 装法（项目根目录）：
 #   python -m venv .venv

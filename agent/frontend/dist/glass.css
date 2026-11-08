@@ -2936,10 +2936,14 @@ body:has(.app.app-chat)::after {
 }
 .gr-acts span:hover { border-color: var(--c); background: #fff; }
 .gr-acts i { width: 5px; height: 5px; border-radius: 50%; background: var(--c); flex: none; }
-/* 小型紧凑版（态势全景 · 退货原因结构） */
-.glass-radial.sm .gr-t1 { font-size: 9px; letter-spacing: .1em; }
-.glass-radial.sm .gr-t2 { font-size: 14px; }
-.glass-radial.sm .gr-t3 { font-size: 8px; }
+/* 小型紧凑版（态势全景 · 退货原因结构）
+   圆径 R 从 50 提到 58（见 glass.js），字号同步上调 ——
+   原来是 9/14/8px，第三行「6 大原因 · 合计 99.9%」实测宽 76.5px 却只落在
+   100px 直径里，两侧各剩 8px，几乎贴着圆周；行间距也只有 2px。
+   现在 10/15/9px + 圆径 116px，第三行两侧余量约 17px，行间 7-8px。 */
+.glass-radial.sm .gr-t1 { font-size: 10px; letter-spacing: .09em; }
+.glass-radial.sm .gr-t2 { font-size: 15px; letter-spacing: .04em; }
+.glass-radial.sm .gr-t3 { font-size: 9px; letter-spacing: 0; }
 .glass-radial.sm .gr-node {
   width: 140px; border-radius: 12px; padding: 8px 10px 9px;
   box-shadow: 0 6px 16px -12px rgba(90, 70, 150,.5);
@@ -2954,6 +2958,47 @@ body:has(.app.app-chat)::after {
   .pg-2col .pg-card:has(.glass-radial.sm) { grid-row: span 2; align-self: stretch; display: flex; flex-direction: column; }
   .pg-2col .pg-card:has(.glass-radial.sm) .bi-bar-body { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: center; }
 }
+
+/* ================================================================ ⑬m-2 放射图越界（策划页）
+   【实测问题】glass.js 把 .glass-radial 插在 .bi-bars 前面，而 .bi-bars 位于
+   .pg-plan-master 的左栏（grid-template-columns: minmax(240px,34%) 1fr）。
+   径向图固定 min-width:480px，在 1440px 视口下左栏只有约 470px，
+   于是整块图向右溢进右栏的「动作明细表」，被表格压在下面 ——
+   表现是原因卡片（破损/变质/污损…）半透明地压在表格第一列上，
+   表格里的"泡沫箱 + 冰袋 + 防撞隔板"被盖住半截。
+   这跟中心圆里的字号无关，但用户看到的是同一件事："字被盖住了"。
+
+   【为什么不用 transform: scale() 收图】
+   缩放会把内部 .gr-node 的绝对定位坐标和鼠标命中区一起缩放，
+   点原因卡片会点不中（本项目踩过这个坑）。改用容器宽度约束 + SVG 自适应。
+   【为什么不 overflow:hidden】
+   会把左右两侧的原因节点裁掉半个。 */
+.pg-plan-master { position: relative; }
+/* 【左栏要够宽，径向图才成立】
+   径向图里左右各一列原因卡（每列最小 ~130px），中间还要留出中心圆
+   128px 直径 + 两侧 21px 余量 ≈ 170px。合计下限约 430px，
+   再窄就会"两列卡夹住中间的圆"——实测 34% 时只剩约 170px 给圆，
+   圆勉强放下但两侧卡片挤成一团。
+   所以这里把左栏下限抬到 380px、上限抬到 42%（1440px 下约 600px 足够）；
+   同时右栏放 minmax(0,1fr)，允许表格自己收缩换行，而不是被左栏挤。
+   ——这是唯一一处改动了 app.css 既有栅格的地方，改的是"给图留够地方"，
+   不是重排信息层级。 */
+.pg-plan-master { grid-template-columns: minmax(380px, 42%) minmax(0, 1fr); }
+@media (max-width: 1180px) {
+  .pg-plan-master { grid-template-columns: 1fr; }
+}
+/* 左栏成为独立的裁剪上下文：图再怎么大也不会跑进右栏 */
+.pg-plan-rank { position: relative; isolation: isolate; overflow: hidden; }
+/* 右栏抬到左栏之上：即便将来又有东西溢出，也压不到表格正文 */
+.pg-plan-detail { position: relative; z-index: 1; }
+/* 径向图按容器宽度收窄，不再硬撑 480px */
+.pg-plan-rank .glass-radial { min-width: 0 !important; width: 100%; max-width: 100%; }
+.pg-plan-rank .glass-radial .gr-svg { width: 100%; height: 100%; display: block; }
+/* 原因节点也跟着收：小版原本固定 140px，在 325px 宽的栏里左右各 140
+   只剩 45px 给中心圆，两边会互相挤。改成按容器比例，并设下限保证字还能读。 */
+.pg-plan-rank .glass-radial.sm .gr-node { width: min(140px, 42%); }
+/* 右栏表格是这张卡的正文，任何浮动/定位层都不该盖住它 */
+.pg-plan-detail table { position: relative; z-index: 1; }
 
 
 

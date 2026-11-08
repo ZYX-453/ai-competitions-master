@@ -180,7 +180,7 @@ export default function App() {
         <div className="sidenav-brand">
           <div className="brand-mark">炼</div>
           <div className="sidenav-brand-txt">
-            <div className="brand-name">差评炼金炉</div>
+            <div className="brand-name">差评溯源</div>
             <div className="brand-sub">归因诊断工作台</div>
           </div>
         </div>
@@ -292,7 +292,7 @@ function TopBar({ health }: { health: Health | null }) {
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="brand-name">差评炼金炉</span>
+        <span className="brand-name">差评溯源</span>
         <span className="brand-sep">/</span>
         <span className="brand-sub">把「这周为什么涨了」变成一条带证据的归因链</span>
       </div>
