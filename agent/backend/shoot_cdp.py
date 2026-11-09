@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import socket
 import subprocess
 import sys
 import tempfile
@@ -43,15 +44,31 @@ PORT = 9333
 OUT = Path(__file__).resolve().parent / "_tmp" / "shots"
 
 
-def list_pages() -> list[dict]:
-    """列出当前所有 page 类型的 target。"""
-    with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json", timeout=3) as r:
+def free_port() -> int:
+    """要一个空闲端口给这一次调试用。
+
+    【为什么不用固定 9333】
+    上一个 Edge 退出在 Windows 上是滞后的（进程还在、端口还占着），
+    紧接着跑第二次时新实例绑不上端口，而 pick_target 会连到**上一个实例**上——
+    于是出现"第一次探针就报 logged-in、根本没点登录"这种怪现象，
+    截出来的图也可能是上一个实例的（页面相同所以看不出来，换了页面就露馅）。
+    每次要一个新端口，就不存在连到别人身上的可能。
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+def list_pages(port: int | None = None) -> list[dict]:
+    """列出当前所有 page 类型的 target。port 默认用本文件的 PORT。"""
+    port = port or PORT
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/json", timeout=3) as r:
         tabs = json.load(r) or []
     return [t for t in tabs
             if t.get("type") == "page" and t.get("webSocketDebuggerUrl")]
 
 
-def close_strays(keep_id: str) -> list[str]:
+def close_strays(keep_id: str, port: int | None = None) -> list[str]:
     """关掉除 keep_id 以外的页面，返回被关掉的 url 列表。
 
     【这件事必须做，理由是实测出来的，不是洁癖】
@@ -64,13 +81,14 @@ def close_strays(keep_id: str) -> list[str]:
     只留一个页面，就不存在"像素来自哪一页"这个问题了。
     """
     killed = []
-    for t in list_pages():
+    port = port or PORT
+    for t in list_pages(port):
         tid = t.get("id")
         if not tid or tid == keep_id:
             continue
         try:
             urllib.request.urlopen(
-                f"http://127.0.0.1:{PORT}/json/close/{tid}", timeout=3).read()
+                f"http://127.0.0.1:{port}/json/close/{tid}", timeout=3).read()
             killed.append(str(t.get("url"))[:60])
         except Exception:
             pass
@@ -78,7 +96,7 @@ def close_strays(keep_id: str) -> list[str]:
 
 
 def pick_target(prefer_prefix: str = "http://127.0.0.1",
-                timeout: float = 25.0) -> dict:
+                timeout: float = 25.0, port: int | None = None) -> dict:
     """等 DevTools 起来，挑出"我们那个"页面，返回整个 target 字典（含 id）。
 
     【为什么不能取第一个】
@@ -94,10 +112,11 @@ def pick_target(prefer_prefix: str = "http://127.0.0.1",
     所以这里按 URL 前缀挑，挑不到就明确报出来，不猜。
     """
     t0 = time.time()
+    port = port or PORT
     while time.time() - t0 < timeout:
         try:
             with urllib.request.urlopen(
-                    f"http://127.0.0.1:{PORT}/json", timeout=3) as r:
+                    f"http://127.0.0.1:{port}/json", timeout=3) as r:
                 tabs = json.load(r) or []
             pages = [t for t in tabs
                      if t.get("type") == "page" and t.get("webSocketDebuggerUrl")]
@@ -113,7 +132,7 @@ def pick_target(prefer_prefix: str = "http://127.0.0.1",
         time.sleep(0.4)
     # 超时了：把现场说清楚，别静默截错页
     try:
-        pages = list_pages()
+        pages = list_pages(port)
     except Exception:
         pages = []
     if pages:
@@ -123,6 +142,14 @@ def pick_target(prefer_prefix: str = "http://127.0.0.1",
     raise RuntimeError("DevTools 端口没起来")
 
 CASES = [
+    # 【交付用的三张：三种判定结论各一张】
+    # 这三张是"同一屏两套口径"最容易被抓出来的地方，也是参赛材料的屏幕实测证据，
+    # 所以必须能用 `python shoot_cdp.py` 一条命令复现出来。
+    # 之前它们只写在我临时脚本里，说明文档却让人跑这个文件——
+    # 跑出来的会是另外四张，对不上。
+    ("fix_w49", "第49周怎么回事"),          # 显著改善
+    ("fix_w52", "第52周怎么回事"),          # 显著但幅度不足
+    ("fix_w3", "第3周为什么异常"),          # 未达显著
     ("cdp_digital_w52", "数码类目第52周为什么退货率高"),
     ("cdp_greeting", "你好你是谁"),
     # 【v2.7 新增：数据里没有这一类的原因】
@@ -174,6 +201,101 @@ class CDP:
         return r.get("result", {}).get("value")
 
 
+def pass_login(c) -> str:
+    """代点登录，返回最后看到的状态（'logged-in' 表示已进入应用）。
+
+    【为什么必须代点】
+    Login.tsx 的 isLoggedIn 初始 false，也不读任何 URL 参数，
+    于是无头浏览器打开后直接停在登录卡片上：
+    问答页一直等不到结论、工作台一直等不到卡片 → 轮询等到超时 →
+    最后截到一张登录卡片。而"等着不动"看起来像后端挂了，排查方向会完全跑偏。
+
+    【为什么用原生 setter】
+    React 受控 input：直接 el.value='x' 不触发 onChange，state 仍是空，
+    点提交只会报"请输入账号"，然后又是一轮空等。
+    必须调 HTMLInputElement.prototype 上的原生 setter，再派发 input 事件。
+
+    【为什么轮询而不是试一次】
+    Edge 刚启动时页面可能还是空白，试一次就判"不是登录页"会直接漏过。
+    返回值含义：
+      waiting       页面还没渲染出登录卡片（继续等）
+      submitting    已点过，按钮在 400ms 模拟校验里 disabled（继续等）
+      login-clicked 刚点上去（继续等它变成 logged-in）
+      logged-in     应用外壳已挂载
+
+    【"已进入"的判据不能只看 .chat-shell】
+    问答页的外壳是 .chat-shell，工作台七页是 .app-main（App.tsx:225）。
+    第一版只认 .chat-shell，结果 shoot_page.py 跑工作台时永远等不到它——
+    每张图白等 30 秒，还打一行"登录处理超时"，看着像登录失败，
+    其实页面早就画好了（卡片 6、热力格 208 都数到了）。
+    所以判据是"应用外壳之一存在"，与具体页面无关。
+    """
+    js = """(function(){
+      if (document.querySelector('.chat-shell')
+          || document.querySelector('.app-main')) return 'logged-in';
+      var acc = document.getElementById('login-account');
+      var pwd = document.getElementById('login-password');
+      if (!acc || !pwd) return 'waiting';
+      var btn = document.querySelector('button.login-btn');
+      if (!btn) return 'waiting';
+      if (btn.disabled) return 'submitting';
+      var setter = Object.getOwnPropertyDescriptor(
+          window.HTMLInputElement.prototype, 'value').set;
+      [[acc, 'demo'], [pwd, 'demo']].forEach(function(p){
+        setter.call(p[0], p[1]);
+        p[0].dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      btn.click();
+      return 'login-clicked';
+    })()"""
+    seen, t0 = '', time.time()
+    while time.time() - t0 < 30:
+        try:
+            v = c.js(js)          # 用 c.js()：CDP.send 是 (method, **params)
+        except Exception as e:
+            v = f"err:{type(e).__name__}"
+        if v and v != seen:
+            print(f"  · 登录处理：{v}")
+            seen = v
+        if v == "logged-in":
+            return v
+        time.sleep(0.5)
+    print(f"  · 登录处理超时：最后一次状态={seen!r}")
+    return seen
+
+
+def drop_login_veil(c) -> int:
+    """收掉 .glass-login 这层登录遮罩，返回收掉的个数。
+
+    【这是排查最费劲的一条，结论反直觉，记下来】
+    现象：登录成功后 DOM 查着一切正常——
+      .chat-shell 存在、正文是完整问答页、DevTools 里 page=1、href 正确；
+      可截出来的像素**永远是登录卡片**。
+    排除过程（都不是）：
+      · 连错靶子？page=1，且 Runtime.evaluate 的 href 正确
+      · 页面重载？window 上的内存标记跨过 setDeviceMetricsOverride 还在
+      · 截图管道坏了？导航到空白页能截出白页
+    真因：dist 里登录页的根节点是 `.glass-login`，
+    position:fixed、z-index:99999、铺满整个视口。
+    登录后 React 把里面的表单子树摘掉了，但**空壳容器还在**，
+    而无头 Edge（--disable-gpu）保留着它上一帧的合成层，
+    于是像素上一直挂着一张已经不存在于 DOM 里的登录卡片。
+    收掉这一层，合成器拿到新的一帧，底下的应用才露出来。
+    它只是装饰底（各页自己有底色），收掉不影响"用户看到什么"的判断。
+    """
+    n = c.js("""(function(){
+      var n = 0;
+      document.querySelectorAll('.glass-login').forEach(function(e){
+        e.style.display = 'none'; n++;
+      });
+      return n;
+    })()""") or 0
+    if n:
+        print(f"  · 已收掉 {n} 层登录遮罩（否则像素会停在登录卡片）")
+        time.sleep(0.4)
+    return n
+
+
 def capture(name: str, question: str) -> Path | None:
     # 【URL 必须带 #/chat，否则截到的是总览页】
     # ChatPage 只在 page==='chat' 时渲染，而 page 由 hash 决定，
@@ -195,9 +317,11 @@ def capture(name: str, question: str) -> Path | None:
     # 后果见 pick_target 的注释：正文对、截图错。
     # 换成临时目录，跑完删掉 —— 没有可恢复的会话，就只有我们这一页。
     _profile = Path(tempfile.mkdtemp(prefix="cdp_profile_"))
+    # 每次要一个空闲端口：固定端口时，上一个 Edge 还没退干净就会连到它身上
+    _port = free_port()
     proc = subprocess.Popen([
         EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars",
-        f"--remote-debugging-port={PORT}",
+        f"--remote-debugging-port={_port}",
         "--user-data-dir=" + str(_profile),
         "--no-first-run", "--no-default-browser-check",
         # 【必须禁同步】实测第二个 page 是 `edge://sync-confirmation-dialog/`，
@@ -208,8 +332,8 @@ def capture(name: str, question: str) -> Path | None:
         url,
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        _tab = pick_target("http://127.0.0.1")
-        _killed = close_strays(_tab["id"])
+        _tab = pick_target("http://127.0.0.1", port=_port)
+        _killed = close_strays(_tab["id"], port=_port)
         if _killed:
             print(f"  · 已关掉 {len(_killed)} 个多余页面（否则像素可能来自它们）")
             time.sleep(0.4)
@@ -217,81 +341,12 @@ def capture(name: str, question: str) -> Path | None:
         c.send("Page.enable")
         c.send("Runtime.enable")
 
-        # ---- 先过登录页 ----
-        # 【登录页是 v4 之后加的，截图脚本因此又一次全线失效】
-        # Login.tsx 的 isLoggedIn 初始 false，也不读任何 URL 参数，
-        # 于是 headless 打开后直接停在登录卡片上：
-        #   .chat-shell 永远等不到 → 轮询一路等到 90s 超时 → 截到一张登录页。
-        # 更麻烦的是"等着不动"看起来像后端挂了，排查方向会完全跑偏。
-        # 这里在开始轮询前代点一次登录（演示环境不校验口令，任意值即可）。
-        #
-        # 注意 React 受控 input：必须用原生 setter + 派发 input 事件。
-        # 直接 el.value = 'x' 不会触发 onChange，React 里的 state 仍是空，
-        # 点提交只会报"请输入账号"，然后又是一轮空等。
-        # 必须轮询，不能只试一次：Edge 刚启动时页面可能还是空白，
-        # 一次就判"不是登录页"会直接漏过。三种返回值的含义：
-        #   waiting       —— 页面还没渲染出登录卡片（继续等）
-        #   submitting    —— 已点过，登录按钮在 400ms 校验里 disabled（继续等）
-        #   login-clicked —— 刚点上去（继续等它变成 logged-in）
-        #   logged-in     —— .chat-shell 已挂载，可以交给下面的稳定态轮询
-        _probe_js = """(function(){
-          if (document.querySelector('.chat-shell')) return 'logged-in';
-          var acc = document.getElementById('login-account');
-          var pwd = document.getElementById('login-password');
-          if (!acc || !pwd) return 'waiting';
-          var btn = document.querySelector('button.login-btn');
-          if (!btn) return 'waiting';
-          if (btn.disabled) return 'submitting';
-          var setter = Object.getOwnPropertyDescriptor(
-              window.HTMLInputElement.prototype, 'value').set;
-          [[acc, 'demo'], [pwd, 'demo']].forEach(function(p){
-            setter.call(p[0], p[1]);
-            p[0].dispatchEvent(new Event('input', { bubbles: true }));
-          });
-          btn.click();
-          return 'login-clicked';
-        })()"""
-        _seen, _t_login = '', time.time()
-        while time.time() - _t_login < 30:
-            try:
-                _v = c.js(_probe_js)          # 注意用 c.js()：CDP.send 是 (method, **params)
-            except Exception as _e:
-                _v = f"err:{type(_e).__name__}"
-            if _v and _v != _seen:
-                print(f"  · 登录处理：{_v}")
-                _seen = _v
-            if _v == "logged-in":
-                break
-            time.sleep(0.5)
-        else:
-            print(f"  · 登录处理超时：最后一次状态={_seen!r}")
-
-        # ---- 收掉登录遮罩层 ----
-        # 【这是本次排查最费劲的一条，结论反直觉，记下来】
-        # 现象：登录成功后，DOM 查着一切正常 ——
-        #   .chat-shell 存在、.login-page 数量 0、正文也是完整的问答页；
-        #   可截出来的像素**永远是登录卡片**。
-        # 排除过程（都排除了）：
-        #   · 不是连错靶子：DevTools 里 page=1，且 Runtime.evaluate 的 href 正确
-        #   · 不是页面重载：window 上的内存标记跨过 setDeviceMetricsOverride 还在
-        #   · 不是截图管道坏了：导航到空白页能截出白页
-        # 真因：dist 里登录页的根节点是 `.glass-login`，
-        # position:fixed、z-index:99999、铺满整个视口（1410x905）。
-        # 登录后 React 把里面的表单子树摘掉了，但这个**空壳容器仍然在**，
-        # 而无头 Edge（--disable-gpu）保留着它上一帧的合成层 ——
-        # 于是像素上一直挂着一张已经不存在于 DOM 里的登录卡片。
-        # 把这一层收掉，合成器拿到新的一帧，问答页才露出来。
-        # 它只是个装饰底（问答页自己有底色），收掉不影响"用户看到什么"的判断。
-        _hide = c.js("""(function(){
-          var n = 0;
-          document.querySelectorAll('.glass-login').forEach(function(e){
-            e.style.display = 'none'; n++;
-          });
-          return n;
-        })()""")
-        if _hide:
-            print(f"  · 已收掉 {_hide} 层登录遮罩（否则像素会停在登录卡片）")
-            time.sleep(0.4)
+        # ---- 先过登录页，再收掉遮罩层 ----
+        # 这两步现在抽成了函数，因为 shoot_page.py（工作台七页）踩的是同一个坑：
+        # 它也会停在登录卡片上，只是判据不同、等满 60s 超时后截一张登录页。
+        # 同一件事写两份，迟早修一份漏一份。
+        pass_login(c)
+        drop_login_veil(c)
 
         # 轮询直到稳定。
         # 【判据试了四版才定下来，过程记录如下，免得以后又走回头路】
@@ -439,11 +494,11 @@ def capture(name: str, question: str) -> Path | None:
         # 这种图会被人当成"已经验证过了"，比没有图更糟。
         # 截图前再清一次：多余页面是**中途冒出来**的（同步确认弹窗），
         # 只在启动时数一遍会漏。清完再数，数不到 1 个就拒绝出图。
-        _killed2 = close_strays(_tab["id"])
+        _killed2 = close_strays(_tab["id"], port=_port)
         if _killed2:
             print(f"  · 截图前又关掉 {len(_killed2)} 个页面：{_killed2}")
             time.sleep(0.5)
-        _pages = list_pages()
+        _pages = list_pages(_port)
         _npages = len(_pages)
         _snap = c.js("""JSON.stringify({
           chat: document.querySelectorAll('.chat-shell').length,

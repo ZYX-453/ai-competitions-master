@@ -34,9 +34,17 @@ from pathlib import Path
 
 import websocket
 
+# 【CDP / 取页面 / 过登录 一律复用 shoot_cdp】
+# 这三件事原来在本文件里各有一份实现，而 shoot_cdp 那边修了四个坑
+# （登录页、高度、.glass-login 残帧、多余的 page target），这里一份都没跟上。
+# 于是"问答页截图好了、工作台截图还是登录卡片"。同一件事只能有一份实现。
+from shoot_cdp import (CDP, close_strays, drop_login_veil, free_port,
+                       list_pages, pass_login, pick_target)
+
 EDGE = r"C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"
 BASE = "http://127.0.0.1:8848/"
-PORT = 9334
+# 【不再固定端口】原来写死 9334，上一个 Edge 退出滞后时会连到它身上。
+# 现在每次 free_port() 要一个空闲端口（见 shoot_cdp.free_port 的说明）。
 OUT = Path(__file__).resolve().parent / "_tmp" / "pages"
 
 # 页面 key → hash 路由
@@ -51,40 +59,15 @@ HASH = {
 
 
 def wait_devtools(timeout: float = 25.0) -> str:
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        try:
-            with urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json", timeout=2) as r:
-                tabs = json.load(r)
-            for t in tabs:
-                if t.get("type") == "page" and t.get("webSocketDebuggerUrl"):
-                    return t["webSocketDebuggerUrl"]
-        except Exception:
-            pass
-        time.sleep(0.4)
-    raise RuntimeError("DevTools 端口没起来")
+    """【已废弃，保留只为不破坏外部调用】请用 shoot_cdp.pick_target。
 
-
-class CDP:
-    def __init__(self, url: str):
-        self.ws = websocket.create_connection(url, timeout=90)
-        self.n = 0
-
-    def send(self, method: str, **params):
-        self.n += 1
-        mid = self.n
-        self.ws.send(json.dumps({"id": mid, "method": method, "params": params}))
-        while True:
-            msg = json.loads(self.ws.recv())
-            if msg.get("id") == mid:
-                if "error" in msg:
-                    raise RuntimeError(f"{method}: {msg['error']}")
-                return msg.get("result", {})
-
-    def js(self, expr: str):
-        r = self.send("Runtime.evaluate", expression=expr,
-                      returnByValue=True, awaitPromise=False)
-        return r.get("result", {}).get("value")
+    原来这里和 shoot_cdp.py 各写了一份"取第一个 page 的 ws 地址"，
+    而那份实现有硬伤：DevTools 里会有第二个页面（Edge 同步确认弹窗、
+    会话恢复出来的标签页），取到哪个全看 /json 的顺序。
+    连错靶子时的症状是"DOM 对、像素错"，极难自证。
+    两份实现 → 修一份漏一份，所以现在统一走 shoot_cdp。
+    """
+    return pick_target(port=free_port())["webSocketDebuggerUrl"]
 
 
 def capture(name: str, page: str = 'dashboard',
@@ -100,19 +83,34 @@ def capture(name: str, page: str = 'dashboard',
     # 用**时间戳**做后缀而不是 name：同名重跑时会撞上上一次留下的目录，
     # 又回到同一个坑；时间戳保证每次都是全新的空 profile。
     profile = OUT / f"_profile_{int(time.time()*1000)}"
+    # 端口也不能固定：上一个 Edge 没退干净时会连到它身上（表现为"第一次探针就 logged-in"）
+    port = free_port()
 
     proc = subprocess.Popen([
         EDGE, "--headless=new", "--disable-gpu", "--hide-scrollbars",
         "--no-first-run", "--no-default-browser-check",
-        f"--remote-debugging-port={PORT}",
+        # 【禁同步】否则 Edge 会在运行中途弹 edge://sync-confirmation-dialog/，
+        # DevTools 里就多出一个 page，截图可能取到它（症状：DOM 对、像素错）
+        "--disable-sync", "--disable-background-networking",
+        f"--remote-debugging-port={port}",
         "--user-data-dir=" + str(profile),
         "--window-size=1440,1200",
         url,
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
-        c = CDP(wait_devtools())
+        tab = pick_target("http://127.0.0.1", port=port)
+        killed = close_strays(tab["id"], port=port)
+        if killed:
+            print(f"  · 已关掉 {len(killed)} 个多余页面")
+            time.sleep(0.4)
+        c = CDP(tab["webSocketDebuggerUrl"])
         c.send("Page.enable")
         c.send("Runtime.enable")
+
+        # 工作台七页同样在登录页后面 —— 不代点登录，判据永远等不到 .pg-card，
+        # 满 60s 超时后截一张登录卡片。这一步以前整段缺失。
+        pass_login(c)
+        drop_login_veil(c)
 
         t0 = time.time()
         ready = False
@@ -128,7 +126,11 @@ def capture(name: str, page: str = 'dashboard',
                 cards: document.querySelectorAll('.pg-card').length,
                 kpis: document.querySelectorAll('.pg-stat').length,
                 bars: document.querySelectorAll('.bi-bar-row').length,
-                heat: document.querySelectorAll('.bi-heat-c').length,
+                // 【两页的热力格类名不一样，都要数】
+                // 总览页是 .bi-heat-c（BiKit 的矩阵），原因治理页是 .pg-heat-td。
+                // 只数前者的话，原因页会报"热力格 0"——矩阵明明画好了，
+                // 日志却说 0，读起来像没渲染出来，白排查一轮。
+                heat: document.querySelectorAll('.bi-heat-c, .pg-heat-td').length,
                 nan: (txt.match(/NaN|undefined/g) || []).length,
               };
             })()""")
@@ -149,9 +151,22 @@ def capture(name: str, page: str = 'dashboard',
             document.documentElement.scrollHeight, window.innerHeight))()""") or 1200
         h = int(min(max(h + 30, 900), 8000))
 
-        c.send("Emulation.setDeviceMetricsOverride", width=1440, height=h,
-               deviceScaleFactor=2, mobile=False)
-        time.sleep(0.4)
+        # 【高度闭环自校正】理由同 shoot_cdp：一次性算式永远差几十像素，
+        # 大看板（原因治理页）最后一行会正好被卡在边界上。
+        for _ in range(4):
+            c.send("Emulation.setDeviceMetricsOverride", width=1440, height=h,
+                   deviceScaleFactor=2, mobile=False)
+            time.sleep(0.5)
+            over = c.js("""(() => {
+              const e = document.querySelector('.app-scroll');
+              return e ? Math.max(0, e.scrollHeight - e.clientHeight) : 0;
+            })()""") or 0
+            if over <= 2:
+                break
+            print(f"  · 还差 {over}px 被藏住，视口加高到 {h + over + 40}")
+            h = int(min(h + over + 40, 8000))
+        if len(list_pages(port)) != 1:
+            raise RuntimeError("DevTools 里不止一个页面，拒绝出图")
         shot = c.send("Page.captureScreenshot", format="png", captureBeyondViewport=True)
         dst = OUT / f"{name}.png"
         dst.write_bytes(base64.b64decode(shot["data"]))
