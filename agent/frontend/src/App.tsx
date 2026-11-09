@@ -31,6 +31,7 @@ import { Plan } from './pages/Plan'
 import { Reviews } from './pages/Reviews'
 import { Competitors } from './pages/Competitors'
 import { ChatPage } from './pages/ChatPage'
+import { Login } from './pages/Login'
 import { Loading } from './components/PageKit'
 
 interface Health {
@@ -64,6 +65,7 @@ function parseHash(): { page: PageKey; arg: string } {
 }
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false)
   const [health, setHealth] = useState<Health | null>(null)
   const [nav, setNav] = useState<NavData | null>(null)
   const [page, setPage] = useState<PageKey>(() => parseHash().page)
@@ -167,6 +169,8 @@ export default function App() {
     go('attribution', w)
   }, [go])
 
+  if (!isLoggedIn) return <Login onLogin={() => setIsLoggedIn(true)} />
+
   if (!nav) return <div className="pg-boot"><Loading label="连接后端" /></div>
 
   const cur = nav.pages.find((p) => p.key === page)
@@ -180,7 +184,7 @@ export default function App() {
         <div className="sidenav-brand">
           <div className="brand-mark">炼</div>
           <div className="sidenav-brand-txt">
-            <div className="brand-name">差评溯源</div>
+            <div className="brand-name">智鉴察源</div>
             <div className="brand-sub">归因诊断工作台</div>
           </div>
         </div>
@@ -280,7 +284,7 @@ export default function App() {
               setCategory={setCategory}
             />
           )}
-          {page === 'chat' && <ChatPage health={health} nav={nav} />}
+          {page === 'chat' && <ChatPage health={health} nav={nav} go={go} />}
         </div>
       </main>
     </div>
@@ -292,7 +296,7 @@ function TopBar({ health }: { health: Health | null }) {
   return (
     <header className="topbar">
       <div className="brand">
-        <span className="brand-name">差评溯源</span>
+        <span className="brand-name">智鉴察源</span>
         <span className="brand-sep">/</span>
         <span className="brand-sub">把「这周为什么涨了」变成一条带证据的归因链</span>
       </div>

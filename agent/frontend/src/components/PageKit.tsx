@@ -12,6 +12,7 @@
  * Card 负责"这块数据是什么口径"。位置固定，读者不用找。
  * =========================================================================== */
 import type { ReactNode } from 'react'
+import { useTip } from './BiKit'
 
 /** 页面头。标题 + 一句话 + 右侧的操作区（筛选器之类）。 */
 export function PageHead({
@@ -62,7 +63,7 @@ export function Card({
 
 /** 大数字格。trend 只表达方向，不表达大小。 */
 export function Stat({
-  label, value, unit, sub, tone, title,
+  label, value, unit, sub, tone, title, tip,
 }: {
   label: string
   value: ReactNode
@@ -70,15 +71,28 @@ export function Stat({
   sub?: ReactNode
   tone?: 'bad' | 'warn' | 'good' | 'info'
   title?: string
+  /** 悬浮富提示：跟随鼠标的 .bi-tip 浮层（useTip）。
+      【什么时候用】只给"这个数怎么算的"这类口径说明用 ——
+      z 值、可识别最小效应这种名字自带门槛的卡，读者第一反应
+      是"这数哪来的"；大多数卡自解释，加了反而是噪音。
+      【为什么不用原生 title】1 秒延迟、不能排版、跟系统主题走。 */
+  tip?: ReactNode
 }) {
+  const t = useTip()
   return (
-    <div className="pg-stat" title={title}>
+    <div
+      className="pg-stat"
+      title={title}
+      onMouseMove={tip ? (e) => t.show(e, tip) : undefined}
+      onMouseLeave={tip ? t.hide : undefined}
+    >
       <div className="pg-stat-k">{label}</div>
       <div className={`pg-stat-v${tone ? ` t-${tone}` : ''}`}>
         {value}
         {unit && <small>{unit}</small>}
       </div>
       {sub && <div className="pg-stat-s">{sub}</div>}
+      {t.el}
     </div>
   )
 }

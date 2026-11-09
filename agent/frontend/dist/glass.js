@@ -26,13 +26,13 @@
     { key: 'plan', title: '预警方略', subtitle: '要处理什么', icon: 'alert' },
     { key: 'reviews', title: '众声洞察', subtitle: '用户在说什么', icon: 'message' },
     { key: 'competitors', title: '竞品棱镜', subtitle: '我们处在什么位置', icon: 'target' },
-    { key: 'chat', title: '问一问', subtitle: '有问题，直接问', icon: 'spark' },
+    { key: 'chat', title: '慧询助手', subtitle: '有问题，直接问', icon: 'spark' },
   ];
   /* 导航名 / 建议问法的雅化映射：拦截 /api/pages/nav 与 /api/meta 的响应，
      让 React 页头与玻璃层（停靠栏、命令面板）用同一套更高级的说法 */
   const NAV_TITLES = {
     '总览': '态势全景', '归因': '异动归因', '原因治理': '成因治理',
-    '预警策划': '预警方略', '评论洞察': '众声洞察', '竞品雷达': '竞品棱镜', '问答': '问一问',
+    '预警策划': '预警方略', '评论洞察': '众声洞察', '竞品雷达': '竞品棱镜', '问答': '慧询助手',
   };
   const LABEL_MAP = {
     '双11 那周为什么退货率高': '双十一当周，退货率因何攀升',
@@ -565,7 +565,7 @@
     ov.className = 'glass-login';
     ov.innerHTML =
       `<div class="gl-card">` +
-      `<div class="gl-brand">差评溯源</div>` +
+      `<div class="gl-brand">智鉴察源</div>` +
       `<div class="gl-sub">以循证之链，释一周异动之因</div>` +
       `<div class="gl-field"><input type="text" placeholder="账号（任意）" autocomplete="username"></div>` +
       `<div class="gl-field"><input type="password" placeholder="密码（任意）" autocomplete="current-password"></div>` +
@@ -979,19 +979,25 @@
     return null;
   }
   function readRows(rows) {
+    /* 一次把行文本里能见到的三个口径全部解析出来：
+       ¥xx.x万 = 损失 · xx.xx% = 占比 · N 条(可含千分位逗号) = 条数。
+       哪个口径当前模式没显示就是 0，展示层按 0 省略。
+       不在这里排序 —— 排序依据随当前指标变，见 renderRadial0。 */
     const out = [];
     rows.forEach(r => {
       const text = r.textContent || '';
       const def = CAUSES.find(c => text.includes(c.key));
       if (!def) return;
-      const m = text.match(/([\d.]+)\s*万/), n = text.match(/([\d.]+)\s*条/), p = text.match(/([\d.]+)%/);
+      const m = text.match(/¥\s*([\d.]+)\s*万/) || text.match(/([\d.]+)\s*万/),
+        n = text.match(/([\d,]+)\s*条/), p = text.match(/([\d.]+)%/);
       const l = r.querySelector('.bi-bar-l');
-      out.push({ def, row: r, loss: m ? parseFloat(m[1]) : 1,
+      out.push({ def, row: r,
+        loss: m ? parseFloat(m[1]) : 0,
+        n: n ? parseInt(n[1].replace(/,/g, ''), 10) : 0,
         share: p ? parseFloat(p[1]) : 0,
-        label: (l && l.textContent || def.full || def.key || '').replace(/…$/, ''),
-        meta: (n ? n[1] + '条' : '') + (p ? ' · ' + p[1] + '%' : '') });
+        label: (l && l.textContent || def.full || def.key || '').replace(/…$/, '') });
     });
-    return out.sort((a, b) => b.loss - a.loss);
+    return out;
   }
   /* 放射诊断地图：中心大圆（第 N 周差评诊断）+ 6 条辐射分支（粗细=损失占比）
      + 末端原因节点（损失/占比）挂 2-3 个核心动作标签；颜色按原因分类区分。
@@ -1012,13 +1018,25 @@
     const { bars, rows } = found;
     const causes = readRows(rows);
     if (causes.length < 4) return;
+    /* 当前指标从卡片头部的分段按钮读（aria-selected 的那个 tab 文本）：
+       占比 / 条数 / 损失。找不到切换器（如预警方案页）按损失算。
+       ——之前「占比/条数/损失」怎么点图都不动：占比↔条数两种模式的
+       行文本完全相同、只有条宽在变，MutationObserver 只听 childList
+       根本收不到通知；就算收到，解析排序也永远按损失。 */
+    const cardEl = bars.closest('.card');
+    const seg = cardEl && cardEl.querySelector('.bi-seg-i[aria-selected="true"]');
+    const metric = seg ? (seg.textContent || '').trim() : '损失';
+    const val = c => metric === '占比' ? (c.share || 0)
+      : metric === '条数' ? (c.n || 0) : (c.loss || 0);
+    causes.sort((a, b) => val(b) - val(a));
+    const maxV = Math.max(...causes.map(val), 0.0001);
     let wrap = bars.parentElement.querySelector('.glass-sankey');
     if (!wrap) {
       wrap = document.createElement('div');
       wrap.className = 'glass-sankey';
       bars.parentElement.insertBefore(wrap, bars);
     }
-    const sig = causes.map(c => c.loss + c.label).join('|') + (small ? '#rs1' : '#r1');
+    const sig = causes.map(c => val(c) + c.label).join('|') + '#' + metric + (small ? '#rs1' : '#r1');
     if (wrap.dataset.sig === sig && wrap.firstChild) { bars.style.display = 'none'; wrap.style.display = ''; return; }
     wrap.dataset.sig = sig;
     wrap.innerHTML = '';
@@ -1073,16 +1091,26 @@
        所以这里先建一个空的 <g> 占位，等分支都画完（见函数末尾）
        再把文字塞进去并把它移到 svg 最后一个子节点。 */
     const textLayer = svgEl('g', { 'class': 'gr-textlayer' }, svg);
-    const wk = (document.body.textContent.match(/第\s*(\d+)\s*周/) || [])[1] || '44';
-    const total = causes.reduce((a, c) => a + (c.share || 0), 0);
+    /* 中心标题按口径区分：
+       态势全景（small）的「退货原因结构」是全期合计 —— 后端 dashboard 的
+       causes 对整张 returns 表聚合，不分周；之前却从页面正文随手抓一个
+       "第 N 周"标在圆心（正文里异常周表格有"第 24 周"就抓到 24），
+       数据明明是全店整体的，看起来却像每周一帧的局部数据，必须改。
+       预警方案页（大版）的数据才是单周口径，保留周数标题。 */
+    const wk = small ? null : (document.body.textContent.match(/第\s*(\d+)\s*周/) || [])[1] || null;
+    /* 合计随指标走：占比/条数模式合计的是占比百分比，损失模式合计损失金额 */
+    const sumShare = causes.reduce((a, c) => a + (c.share || 0), 0);
+    const sumLoss = causes.reduce((a, c) => a + (c.loss || 0), 0);
     /* 三行的基线：见上面 R 那段注释里给出的分配表。必须与 R 同步改，
        否则"圆变大了但字还挤在中间"或"字顶到圆外"两者必犯其一。 */
     const t1 = svgEl('text', { x: CX, y: CY - (small ? 19 : 26), 'text-anchor': 'middle', 'class': 'gr-t1' }, textLayer);
-    t1.textContent = '第 ' + wk + ' 周';
+    t1.textContent = small ? '全店整体' : (wk ? '第 ' + wk + ' 周' : '整体口径');
     const t2 = svgEl('text', { x: CX, y: CY + (small ? 6 : 5), 'text-anchor': 'middle', 'class': 'gr-t2' }, textLayer);
     t2.textContent = '差评诊断';
     const t3 = svgEl('text', { x: CX, y: CY + (small ? 26 : 30), 'text-anchor': 'middle', 'class': 'gr-t3' }, textLayer);
-    t3.textContent = causes.length + ' 大原因 · 合计 ' + total.toFixed(1) + '%';
+    t3.textContent = metric === '损失'
+      ? causes.length + ' 大原因 · 合计 ¥' + sumLoss.toFixed(1) + '万'
+      : causes.length + ' 大原因 · 合计 ' + sumShare.toFixed(1) + '%';
 
     /* 联动高亮：悬停分支/节点 → 该链路保持，其余淡出 */
     let hoverDef = null;
@@ -1110,7 +1138,8 @@
          「6 大原因…」上，近距离看就是"字被线盖住了"。
          改成 R + 2：正好贴住圆周外侧，视觉上与圆相接但压不到任何字。 */
       const sx = CX + slot.s * (R + 2);
-      const sw = +(small ? 1.8 + (c.share || 0) * 0.09 : 3 + (c.share || 0) * 0.34).toFixed(1);  /* 粗细 = 占比 */
+      const rel = maxV ? val(c) / maxV : 0;   /* 当前指标下的相对量级 0–1 */
+      const sw = +(small ? 1.8 + rel * 2.2 : 3 + rel * 7).toFixed(1);  /* 粗细 = 当前指标量级 */
       const path = svgEl('path', {
         d: 'M ' + sx.toFixed(1) + ' ' + sy.toFixed(1) +
           ' C ' + (CX + slot.s * (R + (small ? 40 : 64))).toFixed(1) + ' ' + sy.toFixed(1) + ', ' +
@@ -1119,7 +1148,7 @@
         'class': 'gr-branch',
       }, svg);
       const endC = small ? null : svgEl('circle', { cx: nx.toFixed(1), cy: ey.toFixed(1),
-        r: Math.min(6.5, 2.6 + (c.share || 0) * .13).toFixed(1), fill: c.def.c, 'class': 'gr-enddot' }, svg);
+        r: Math.min(6.5, 2.6 + rel * 2.6).toFixed(1), fill: c.def.c, 'class': 'gr-enddot' }, svg);
       /* 末端原因节点：名称 + 真实损失/占比 + 核心动作标签（小版 2 个，大版 3 个） */
       const node = document.createElement('div');
       node.className = 'gr-node';
@@ -1135,9 +1164,20 @@
         : (small ? 'left:0;right:auto;' : 'right:' + ((W - nx + 16) / W * 100).toFixed(2) + '%;')) +
         'top:' + (ey - (small ? 44 : 36)) + 'px;animation-delay:' + (200 + i * 110) + 'ms;';
       const acts = small ? c.def.acts.slice(0, 2) : c.def.acts;
+      /* 大数与副注随当前指标走：占比→百分比，条数→N 条，损失→¥xx.x万；
+         当前模式没显示的口径解析出来是 0，直接省略不写 0 骗人 */
+      const fmtN = v => v ? v.toLocaleString('en-US') : '';
+      const big = metric === '占比' ? (c.share ? c.share.toFixed(1) + '%' : '—')
+        : metric === '条数' ? (c.n ? fmtN(c.n) + ' 条' : '—')
+        : '¥' + (c.loss || 0).toFixed(1) + '万';
+      const meta = metric === '占比'
+        ? (c.loss ? '¥' + c.loss.toFixed(1) + '万' : '')
+        : metric === '条数'
+          ? (c.share ? c.share.toFixed(1) + '%' : '')
+          : ((c.share ? c.share.toFixed(1) + '%' : '') + (c.n ? ' · ' + fmtN(c.n) + ' 条' : ''));
       node.innerHTML =
         '<div class="gr-name" style="color:' + c.def.c + '">' + es(c.label) + '</div>' +
-        '<div class="gr-meta"><b>' + c.loss.toFixed(1) + '</b> 万' + (c.meta ? ' · ' + es(c.meta) : '') + '</div>' +
+        '<div class="gr-meta"><b>' + big + '</b>' + (meta ? ' · ' + es(meta) : '') + '</div>' +
         '<div class="gr-acts">' + acts.map(a =>
           '<span style="--c:' + c.def.c + '" title="' + es(a[1]) + '（' + es(c.label) + '）"><i></i>' + es(a[0]) + '</span>').join('') +
         '</div>';
@@ -1196,8 +1236,13 @@
     bars.style.display = 'none';
   }
   let tmr = null;
-  new MutationObserver(() => { clearTimeout(tmr); tmr = setTimeout(renderRadial, 200); })
-    .observe(document.body, { childList: true, subtree: true });
+  const later = () => { clearTimeout(tmr); tmr = setTimeout(renderRadial, 200); };
+  new MutationObserver(later)
+    .observe(document.body, { childList: true, subtree: true, characterData: true });
+  /* 占比↔条数切换只改条宽（纯 style），上面的 observer 收不到。
+     点完到 React 重渲染完成约 100-300ms，350ms 后主动刷一次；
+     renderRadial 内部有签名缓存，没变化时是零成本空操作。 */
+  document.addEventListener('click', () => { clearTimeout(tmr); tmr = setTimeout(renderRadial, 350); }, true);
   renderRadial();
 })();
 
@@ -1219,17 +1264,32 @@
     '退货原因结构': '条长为该原因损失金额占比，点击查看对应整改动作',
   };
   let tmr = null;
+  /* 当前页面 key（hash 第一段，缺省 dashboard）。
+     【关键结论只属于总览页】注入条件原本只看 .pg-2col 是否存在，
+     而预警方案（attribution）、评测洞察（reviews）页也有 .pg-2col
+     —— 结果这两页底部各被插了一张别人家的结论卡（2026-11-09 实测）。
+     以路由为准：dashboard 才注入；其它页发现残留（切页时 React
+     未重建该节点的情况）就地移除。 */
+  function pageKey() {
+    const m = (location.hash || '').match(/^#\/([^/?#]+)/);
+    return (m && m[1]) || 'dashboard';
+  }
   function patch() {
-    const two = document.querySelector('.pg-2col');
-    if (two && !two.querySelector('.glass-verdict')) {
-      const d = document.createElement('div');
-      d.className = 'pg-card glass-verdict';
-      d.innerHTML =
-        `<div class="pg-card-h"><div class="pg-card-t">关键结论</div></div>` +
-        `<ul class="gv-list">` +
-        VERDICT.map((v) => `<li><i class="dot ${v.d}"></i>${v.t}</li>`).join('') +
-        `</ul>`;
-      two.insertBefore(d, two.lastElementChild.nextSibling);
+    const onDash = pageKey() === 'dashboard';
+    if (!onDash) {
+      document.querySelectorAll('.glass-verdict').forEach((el) => el.remove());
+    } else {
+      const two = document.querySelector('.pg-2col');
+      if (two && !two.querySelector('.glass-verdict')) {
+        const d = document.createElement('div');
+        d.className = 'pg-card glass-verdict';
+        d.innerHTML =
+          `<div class="pg-card-h"><div class="pg-card-t">关键结论</div></div>` +
+          `<ul class="gv-list">` +
+          VERDICT.map((v) => `<li><i class="dot ${v.d}"></i>${v.t}</li>`).join('') +
+          `</ul>`;
+        two.insertBefore(d, two.lastElementChild.nextSibling);
+      }
     }
     document.querySelectorAll('.pg-card-h').forEach((h) => {
       const t = h.querySelector('.pg-card-t');
@@ -1315,6 +1375,14 @@
   let tmr = null;
   function scan() {
     document.querySelectorAll('.pg-kpi-row .pg-stat-v').forEach((el, idx) => {
+      /* 长文本大数标记：大数大多以数字开头（可含 ¥ 前缀或 +/± 符号前缀，
+         如归因页「偏离基准 +3.64pp」），首字符不属于这些的是文本值
+         （如成因治理页「损失最大的原因：破损/变质/污损」），
+         34px 巨字会挤爆卡片 —— 打 .v-txt 让 CSS 降一档。
+         【+ 必须放行】带符号数值（+3.64/-0.8/±1.2）是正经数字卡，
+         2026-11-09 曾因正则只认 [0-9¥] 把 +3.64 误降成 20px 小字。
+         每轮扫描都重判：React 重渲染会抹掉类，数值型/文本型切换也能跟上。 */
+      el.classList.toggle('v-txt', !/^\s*[0-9¥+\-±]/.test(el.textContent || ''));
       if (el.dataset.gcuRun === '1') return;           /* 动画进行中，勿动 */
       if (el.dataset.gcu === el.textContent) return;   /* 已滚过且数值未变 */
       el.classList.remove('gcu-done');
@@ -1424,6 +1492,12 @@
   'use strict';
   let dd = null, rv = null, loaded = false;
   let metric = '差评率', span = '本周', cat = null;   /* cat=null 即全店 */
+  /* 右栏「筛选详情」面板状态（与主区共享同一份真相）：
+     causeSel  = 原因筛选选中的原因（排行卡高亮联动，null=未锁定）
+     actionSel = 建议动作选中的动作（底部气泡联动，null=未选）
+     panelOn   = 每组的开关；off 时该组胶囊灰化且效果复位 */
+  let causeSel = null, actionSel = '描述校准', fpEl = null;
+  const panelOn = { '原因筛选': true, '类目筛选': true, '时间对比': true, '建议动作': true };
   let wrap = null, ai = null;
   const ddCache = {};   /* 按类目缓存 dashboard 响应（后端同口径缓存，二次切换 0ms） */
   const pct1 = (v) => Number(v).toFixed(2) + '%';
@@ -1451,6 +1525,79 @@
         return ent ? fetch('/api/pages/reviews?entity=' + encodeURIComponent(ent))
           .then((r) => r.json()).then((d) => { rv = d; }).catch(() => {}) : null;
       });
+  }
+
+  /* ---- 右栏「筛选详情」↔ 主区双向桥 ----
+     面板胶囊与顶部筛选条改的是同一份状态，谁改都走这两个入口，
+     再由 render() 重渲染主区、syncFilterPanel() 回写面板选中态。 */
+  function setCat(next) {
+    if (next === cat) return;
+    cat = next;          /* 服务端整页重算：tail/causes/anomalies 随类目变 */
+    render();
+  }
+  function setSpan(next) {
+    if (next === span) return;
+    span = next;
+    render();
+  }
+
+  /* 面板各组的候选胶囊（随真实数据生成，不再写死）。
+     类目 = dashboard.by_category 的真实类目；原因 = causes 前 3（退货原因口径）。 */
+  function fpTagsFor(name) {
+    const ddAll = ddCache['_all'];
+    if (name === '类目筛选')
+      return ['全店'].concat((ddAll && ddAll.by_category || []).map((c) => c.category));
+    if (name === '原因筛选')
+      return (ddAll && ddAll.causes || []).slice(0, 3).map((c) => c.cause);
+    if (name === '时间对比') return ['本周', '近4周', '近12周'];
+    return ['包装升级', '描述校准', '预警管理', '发货校验', '主动补偿'];
+  }
+
+  /* 面板当前选中值（读主区状态，面板自己不存第二份） */
+  function fpSelFor(name) {
+    if (name === '类目筛选') return cat || '全店';
+    if (name === '时间对比') return span;
+    if (name === '原因筛选') return causeSel;
+    return actionSel;
+  }
+
+  /* 面板胶囊点击 → 修改主区状态 */
+  function panelPick(name, v) {
+    if (!panelOn[name]) return;
+    if (name === '类目筛选') { setCat(v === '全店' ? null : v); return; }
+    if (name === '时间对比') { setSpan(v); return; }
+    if (name === '原因筛选') { causeSel = causeSel === v ? null : v; render(); return; }
+    actionSel = actionSel === v ? null : v;   /* 建议动作：单选、可反选清空 */
+    render();
+  }
+
+  /* 组开关拨到 off：撤销该组已产生的筛选效果（on 不自动恢复旧选择） */
+  function applyPanelState(name, off) {
+    if (!off) return;
+    if (name === '类目筛选' && cat) { cat = null; render(); }
+    else if (name === '时间对比' && span !== '本周') { span = '本周'; render(); }
+    else if (name === '原因筛选' && causeSel) { causeSel = null; render(); }
+    else if (name === '建议动作' && actionSel) { actionSel = null; render(); }
+  }
+
+  /* 面板 tags 重建 + 选中态同步。签名比对：内容与状态都没变就不动 DOM
+     （MutationObserver 每 200ms 触发一次 patch，不做签名会闪烁） */
+  function syncFilterPanel(fp) {
+    fp.querySelectorAll('.cc-fp-g').forEach((g) => {
+      const name = g.dataset.g;
+      const box = g.querySelector('.ccf-tags');
+      const tags = fpTagsFor(name);
+      const sel = fpSelFor(name);
+      const sig = tags.join('|') + '#' + (sel || '') + '#' + (panelOn[name] ? 1 : 0);
+      if (box.dataset.sig === sig) return;
+      box.dataset.sig = sig;
+      box.innerHTML = tags.map((t2) =>
+        `<span class="${t2 === sel ? 'on' : ''}" data-v="${esc2(t2)}">${esc2(t2)}</span>`).join('');
+      box.querySelectorAll('span').forEach((sp) => {
+        sp.addEventListener('click', () => panelPick(name, sp.dataset.v));
+      });
+      g.classList.toggle('fp-off', !panelOn[name]);
+    });
   }
 
   /* 指标 → 序列。差评率只有全店口径（评论接口无类目参数），
@@ -1605,7 +1752,7 @@
         </div>
         <div class="cc-card"><h4>${CC_ICO}关键原因排行</h4>
           ${causes.length ? causes.map((c) => `
-          <div class="ccr-row">
+          <div class="ccr-row${causeSel === c.cause ? ' on' : ''}" data-cause="${esc2(c.cause)}">
             <span class="ccr-dot"></span>
             <div class="ccr-mid"><span class="ccr-name">${esc2(c.cause)}</span>
               <span class="ccr-bar"><i style="width:${(c.share / causeMax * 100).toFixed(1)}%"></i></span></div>
@@ -1640,26 +1787,25 @@
     /* 导航由 patch() 持久插在大标题之前，这里只渲染筛选条及以下 */
     wrap.innerHTML = bar + hero + cards;
 
-    /* 同步底部通宽输入框上方的两个定位气泡文案 */
+    /* 同步底部通宽输入框上方的两个定位气泡：左=原因锁定态，右=建议动作态 */
     const topCause = c0 ? c0.cause : '—';
-    document.querySelectorAll('.composer-wrap .cc-hints span')
-      .forEach((s) => { s.textContent = '已为你定位 Top 1 异常原因：' + topCause; });
+    const hints = document.querySelectorAll('.composer-wrap .cc-hints span');
+    if (hints[0]) hints[0].textContent = (causeSel && panelOn['原因筛选'])
+      ? '已锁定异常原因：' + causeSel + '（点击排行卡可取消）'
+      : '已为你定位 Top 1 异常原因：' + topCause;
+    if (hints[1]) hints[1].textContent = (actionSel && panelOn['建议动作'])
+      ? '建议动作已选：' + actionSel + ' —— 可在下方追问具体方案'
+      : '试试在下方追问：这条异常该怎么整改';
 
-    /* 交互绑定：时间三胶囊（切换重算）/ 类目单选（纯 UI）/ 指标单选（重算） */
+    /* 交互绑定：时间三胶囊 / 类目单选（均走 setSpan/setCat ——
+       与右栏「筛选详情」面板共享同一状态入口，双向同步）/ 指标单选 */
     wrap.querySelectorAll('.ccf-t').forEach((ch) => {
-      ch.addEventListener('click', () => {
-        if (span === ch.dataset.span) return;
-        span = ch.dataset.span;
-        render();
-      });
+      ch.addEventListener('click', () => setSpan(ch.dataset.span));
     });
     wrap.querySelectorAll('.ccf-c').forEach((ch) => {
       ch.addEventListener('click', () => {
         const name = ch.textContent.trim();
-        const next = name === '全店' ? null : name;
-        if (next === cat) return;
-        cat = next;          /* 服务端整页重算：tail/causes/anomalies/orders 随类目变 */
-        render();
+        setCat(name === '全店' ? null : name);
       });
     });
     wrap.querySelectorAll('.ccf-m').forEach((ch) => {
@@ -1670,8 +1816,18 @@
       });
     });
 
+    /* 排行卡原因行点击 → 锁定/取消（与右栏「原因筛选」同状态双向联动） */
+    wrap.querySelectorAll('.ccr-row[data-cause]').forEach((r) => {
+      r.addEventListener('click', () => {
+        causeSel = causeSel === r.dataset.cause ? null : r.dataset.cause;
+        render();
+      });
+    });
+
     countUp(wrap);
     bindTilt(wrap);
+    /* 面板选中态可能因 render 改了 cat/span/causeSel 而过期，立即回写 */
+    if (fpEl && document.contains(fpEl)) syncFilterPanel(fpEl);
   }
 
   /* ================================================================ 态势全景 · 左侧「范围」面板
@@ -1956,42 +2112,52 @@
       const cm = comp.querySelector('.composer');
       if (cm) comp.insertBefore(hints, cm);
     }
-    /* 右栏「筛选详情」面板（问一问保持原样）：大白卡内嵌四张小卡；
-       「范围」垂直胶囊面板移到态势全景页（见 enhanceScopePanel） */
+    /* 右栏「筛选详情」面板：大白卡内嵌四张小卡，全部可交互。
+       【结构】面板 DOM 持久（建一次），胶囊内容随数据重建（syncFilterPanel，
+       签名比对防闪烁）；选中值永远读主区状态，面板不存第二份。
+       【交互】胶囊点击 → panelPick 改主区状态（类目/时间 = 服务端真实联动，
+       原因 = 排行卡高亮联动，动作 = 底部气泡联动）；
+       开关拨 off = 该组胶囊灰化且已产生的筛选效果复位（applyPanelState）。
+       「范围」垂直胶囊面板移到态势全景页（见 enhanceScopePanel）。 */
     const rr = document.querySelector('.chat-rr .rr-scroll');
-    if (rr && !rr.querySelector('.cc-filterpanel')) {
-      const fpGroups = [
-        { name: '原因筛选', tags: ['描述与实物不符', '尺码版型'] },
-        { name: '类目筛选', tags: ['全店', '服饰'] },
-        { name: '时间对比', tags: [] },
-        { name: '建议动作', tags: ['包装升级', '描述校准', '预警管理', '发货校验', '主动补偿'], act: true },
-      ];
-      const div = document.createElement('div');
-      div.className = 'rr-sec cc-filterpanel';
-      div.innerHTML = `
-        <div class="rr-sec-h">筛选详情</div>
-        ${fpGroups.map((g) => `
-          <div class="cc-fp-g open${g.act ? ' cc-fp-g-act' : ''}">
-            <div class="cc-fp-h">${g.act ? `
-                <span class="cc-fp-act"><i class="ccf-radio"></i>${g.name}</span>
+    if (rr) {
+      let fp = rr.querySelector('.cc-filterpanel');
+      if (!fp) {
+        fp = document.createElement('div');
+        fp.className = 'rr-sec cc-filterpanel';
+        fp.innerHTML =
+          `<div class="rr-sec-h">筛选详情</div>` +
+          ['原因筛选', '类目筛选', '时间对比', '建议动作'].map((name) => `
+          <div class="cc-fp-g open${name === '建议动作' ? ' cc-fp-g-act' : ''}" data-g="${name}">
+            <div class="cc-fp-h">${name === '建议动作' ? `
+                <span class="cc-fp-act"><i class="ccf-radio"></i>${name}</span>
                 <div class="cc-tg on"><span class="cc-tg-dot"></span></div>` : `
                 <div class="cc-tg on"><span class="cc-tg-dot"></span></div>
-                <span class="cc-fp-t">${g.name}</span>`}
-            </div>${g.tags.length ? `
-            <div class="cc-fp-b"><div class="ccf-tags">${g.tags
-              .map((c) => `<span class="${g.act && c === '描述校准' ? 'on' : ''}">${c}</span>`).join('')}</div></div>` : ''}
-          </div>`).join('')}`;
-      div.querySelectorAll('.cc-fp-g').forEach((g) => {
-        g.querySelector('.cc-fp-h').addEventListener('click', (e) => {
-          if (e.target.closest('.cc-tg')) return;
-          g.classList.toggle('open');
+                <span class="cc-fp-t">${name}</span>`}
+            </div>
+            <div class="cc-fp-b"><div class="ccf-tags"></div></div>
+          </div>`).join('');
+        fp.querySelectorAll('.cc-fp-g').forEach((g) => {
+          const name = g.dataset.g;
+          g.querySelector('.cc-fp-h').addEventListener('click', (e) => {
+            if (e.target.closest('.cc-tg')) return;
+            g.classList.toggle('open');
+          });
+          g.querySelector('.cc-tg').addEventListener('click', (e) => {
+            e.stopPropagation();
+            const tg = e.currentTarget;
+            tg.classList.toggle('on');
+            const on = tg.classList.contains('on');
+            panelOn[name] = on;
+            g.classList.toggle('fp-off', !on);
+            applyPanelState(name, !on);   /* off 时复位该组已产生的筛选效果 */
+            if (fpEl) syncFilterPanel(fpEl);
+          });
         });
-        g.querySelector('.cc-tg').addEventListener('click', (e) => {
-          e.stopPropagation();
-          g.querySelector('.cc-tg').classList.toggle('on');
-        });
-      });
-      rr.insertBefore(div, rr.firstChild);
+        rr.insertBefore(fp, rr.firstChild);
+      }
+      fpEl = fp;
+      syncFilterPanel(fp);
     }
   }
   new MutationObserver(() => { clearTimeout(tmr); tmr = setTimeout(patch, 200); })

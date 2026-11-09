@@ -25,6 +25,7 @@
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 import numpy as np
@@ -1120,6 +1121,25 @@ def review_overview(entity: str = '本店') -> dict:
 
 _COMP_CACHE: dict[str, dict] = {}
 
+# 竞品A（同价位）→ 竞品（同价位）：只吃紧跟在"竞品"后、紧挨全角括号的单个字母，
+# 不碰正文里其它 A–D（如维度名、评分等级）
+_COMP_LETTER = re.compile(r'(竞品)\s*[A-Da-d]\s*(?=（)')
+
+
+def _disp_name(name: Any) -> Any:
+    """竞品展示名：去掉字母编号，只留描述语。
+
+    【为什么在出口统一处理，而不改 corpus】
+    字母编号是内部主键的一部分 —— orchestrator 的别名解析
+    （用户说"竞品C"要命中语料里的"竞品C（低价走量）"）、
+    review_tools 的模糊匹配、DGP 真值审计，全都靠全名对齐。
+    语料里动一个字，三处逻辑跟着断；而页面展示只此一个出口，
+    在这里统一洗一遍，数据层与展示层各管各的。
+    """
+    if not isinstance(name, str):
+        return name
+    return _COMP_LETTER.sub(r'\1', name)
+
 
 def competitor_radar(category: str | None = None) -> dict:
     """竞品页：负评率对比 + 维度差距 + 用词差异 + 数据性质。"""
@@ -1147,7 +1167,7 @@ def competitor_radar(category: str | None = None) -> dict:
         is_us = e.get('entity') == '本店'
         neg = float(e.get('neg_pct') or 0) * 100
         ents.append({
-            'entity': e.get('entity'),
+            'entity': _disp_name(e.get('entity')),
             'n': _i(e.get('n')),
             'neg_pct': _f(neg),
             'mean_score': _f(e.get('mean_score'), 3),
@@ -1183,13 +1203,13 @@ def competitor_radar(category: str | None = None) -> dict:
         vals = x.get('values') or {}
         radar.append({
             'label': x.get('label'),
-            'worst': x.get('worst'),
-            'best': x.get('best'),
+            'worst': _disp_name(x.get('worst')),
+            'best': _disp_name(x.get('best')),
             'max': _f(float(x.get('max') or 0) * 100),
             'min': _f(float(x.get('min') or 0) * 100),
             'spread': _f(float(x.get('spread') or 0) * 100),
             'by_entity': [{
-                'entity': k,
+                'entity': _disp_name(k),
                 'value': _f(float(v) * 100),
                 'is_us': k == '本店',
             } for k, v in vals.items()],
@@ -1225,7 +1245,7 @@ def competitor_radar(category: str | None = None) -> dict:
 
         contrast = {
             'ok': True,
-            'benchmark': cw.get('base') or '',
+            'benchmark': _disp_name(cw.get('base') or ''),
             'scope': cw.get('compare_scope') or '',
             'ours': _side(cw.get('only_in_target'), 'in_target'),
             'theirs': _side(cw.get('only_in_base'), 'in_base'),

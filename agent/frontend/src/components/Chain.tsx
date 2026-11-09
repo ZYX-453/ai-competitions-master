@@ -14,7 +14,37 @@ import type { StepState, ThoughtEvent } from '../lib/types'
  * · 证据默认收起。如果一上来全铺开，视线会被淹没，看不到主链。
  * · 步骤本身不做折叠——折叠会让"流式追加"变得难判断（不知道是没到还是被折了）。
  */
-export function Chain({ steps, thoughts }: { steps: StepState[]; thoughts: ThoughtEvent[] }) {
+/* 工具名 → 数据页映射：推理链每一步查的是什么数据，
+   就跳到看那份"具体数据"的页面。点击步骤即可直达，
+   有周次参数的会一并带上（#/attribution/44 这种可分享链接）。 */
+export const TOOL_PAGE: Record<string, string> = {
+  overview: 'attribution',
+  diagnose_week: 'attribution',
+  compare_weeks: 'attribution',
+  trend: 'attribution',
+  reason_profile: 'reasons',
+  reason_kb: 'reasons',
+  action_playbook: 'plan',
+  value_of_reduction: 'plan',
+  review_sentiment: 'reviews',
+  review_wordcloud: 'reviews',
+  review_persona: 'reviews',
+  review_samples: 'reviews',
+  competitor_compare: 'competitors',
+  collector_status: 'dashboard',
+}
+
+/** 从工具参数里抠出周次（args.week=44 → 44；没有或非法 → undefined） */
+function weekOf(args: Record<string, unknown> | undefined): number | undefined {
+  const w = Number(args?.week)
+  return Number.isInteger(w) && w > 0 ? w : undefined
+}
+
+export function Chain({ steps, thoughts, onOpen }: {
+  steps: StepState[]
+  thoughts: ThoughtEvent[]
+  onOpen?: (page: string, week?: number) => void
+}) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
 
   if (steps.length === 0 && thoughts.length === 0) return null
@@ -30,50 +60,70 @@ export function Chain({ steps, thoughts }: { steps: StepState[]; thoughts: Thoug
       </div>
 
       <div className="steps">
-        {steps.map((s, i) => (
-          <div key={s.id} className={`step ${s.status}`}>
-            <div
-              className="step-main"
-              onClick={() => s.evidence && setOpen((o) => ({ ...o, [s.id]: !o[s.id] }))}
-              style={{ cursor: s.evidence ? 'pointer' : 'default' }}
-            >
-              <div className="step-ico">
-                {s.status === 'running' ? (
-                  <div className="spinner" />
-                ) : s.status === 'fail' ? (
-                  '!'
-                ) : (
-                  String(i + 1).padStart(2, '0')
-                )}
-              </div>
+        {steps.map((s, i) => {
+          const page = onOpen ? TOOL_PAGE[s.tool] : undefined
+          const week = weekOf(s.args)
+          const canJump = !!page && s.status === 'done'
+          const handleClick = () => {
+            if (canJump && page) onOpen!(page, week)          // 点击步骤 → 跳到对应数据页
+            else if (s.evidence) setOpen((o) => ({ ...o, [s.id]: !o[s.id] }))  // 无处可跳时保留展开证据
+          }
+          return (
+            <div key={s.id} className={`step ${s.status}${canJump ? ' can-jump' : ''}`}>
+              <div
+                className="step-main"
+                onClick={handleClick}
+                style={{ cursor: canJump || s.evidence ? 'pointer' : 'default' }}
+                title={canJump ? '点击查看对应的数据页' : s.evidence ? '点击展开证据' : undefined}
+              >
+                <div className="step-ico">
+                  {s.status === 'running' ? (
+                    <div className="spinner" />
+                  ) : s.status === 'fail' ? (
+                    '!'
+                  ) : (
+                    String(i + 1).padStart(2, '0')
+                  )}
+                </div>
 
-              <div style={{ minWidth: 0 }}>
-                <div className="step-title">
-                  {s.title}
-                  <span className="step-tool">{s.tool}</span>
-                  {Object.keys(s.args || {}).length > 0 && (
-                    <span className="step-tool">
-                      ({Object.entries(s.args).map(([k, v]) => `${k}=${v}`).join(', ')})
+                <div style={{ minWidth: 0 }}>
+                  <div className="step-title">
+                    {s.title}
+                    <span className="step-tool">{s.tool}</span>
+                    {Object.keys(s.args || {}).length > 0 && (
+                      <span className="step-tool">
+                        ({Object.entries(s.args).map(([k, v]) => `${k}=${v}`).join(', ')})
+                      </span>
+                    )}
+                  </div>
+                  {s.summary && <div className="step-sum">{s.summary}</div>}
+                  {s.error && <div className="step-sum" style={{ color: 'var(--bad)' }}>{s.error}</div>}
+                </div>
+
+                <div className="step-right">
+                  {s.ms != null && <span className="step-ms">{s.ms.toFixed(0)}ms</span>}
+                  {canJump && (
+                    <span className="step-jump">查数据 ›</span>
+                  )}
+                  {s.evidence && (
+                    <span
+                      className="step-ms"
+                      style={{ color: open[s.id] ? 'var(--accent)' : undefined }}
+                      onClick={(e) => {
+                        e.stopPropagation()   // + 号只管证据展开，不触发跳转
+                        setOpen((o) => ({ ...o, [s.id]: !o[s.id] }))
+                      }}
+                    >
+                      {open[s.id] ? '−' : '+'}
                     </span>
                   )}
                 </div>
-                {s.summary && <div className="step-sum">{s.summary}</div>}
-                {s.error && <div className="step-sum" style={{ color: 'var(--bad)' }}>{s.error}</div>}
               </div>
 
-              <div className="step-right">
-                {s.ms != null && <span className="step-ms">{s.ms.toFixed(0)}ms</span>}
-                {s.evidence && (
-                  <span className="step-ms" style={{ color: open[s.id] ? 'var(--accent)' : undefined }}>
-                    {open[s.id] ? '−' : '+'}
-                  </span>
-                )}
-              </div>
+              {open[s.id] && s.evidence && <Evidence evidence={s.evidence} note={s.note} />}
             </div>
-
-            {open[s.id] && s.evidence && <Evidence evidence={s.evidence} note={s.note} />}
-          </div>
-        ))}
+          )
+        })}
 
         {thoughts.map((t, i) => (
           <div key={`th${i}`} className="thought">

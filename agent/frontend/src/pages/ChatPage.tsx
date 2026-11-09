@@ -19,7 +19,7 @@ import type {
   AnswerEvent, DoneEvent, PlanEvent, SessionEvent, StepState, ThoughtEvent, Turn,
 } from '../lib/types'
 import type { NavData } from '../lib/pages'
-import { Chain } from '../components/Chain'
+import { Chain, TOOL_PAGE } from '../components/Chain'
 import { Blocks } from '../components/Blocks'
 import { Verdict } from '../components/Verdict'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -32,9 +32,12 @@ interface Meta {
   suggestions: { label: string; question: string }[]
 }
 
-export function ChatPage({ health, nav }: {
+export function ChatPage({ health, nav, go }: {
   health: { data: { rows: Record<string, number>; orders_year: number; return_rate: number } } | null
   nav: NavData
+  /* 由 App 传入的页面跳转函数（go('attribution', 44)）。
+     推理链步骤与右侧执行轨迹用它实现"点击直达对应数据页"。 */
+  go?: (p: string, arg?: string | number) => void
 }) {
   const [meta, setMeta] = useState<Meta | null>(null)
   const [turns, setTurns] = useState<Turn[]>([])
@@ -239,7 +242,7 @@ export function ChatPage({ health, nav }: {
           {turns.length === 0 ? (
             <EmptyState meta={meta} onPick={ask} />
           ) : (
-            turns.map((t) => <TurnView key={t.id} turn={t} />)
+            turns.map((t) => <TurnView key={t.id} turn={t} onOpen={go} />)
           )}
         </div>
 
@@ -300,15 +303,26 @@ export function ChatPage({ health, nav }: {
               </div>
             ) : (
               <div style={{ display: 'grid', gap: 2 }}>
-                {lastTurn.steps.map((s) => (
-                  <div key={s.id} className={`tool-pill ${s.status === 'running' ? 'on' : ''}`}>
-                    <span style={{ width: 5, height: 5, borderRadius: '50%',
-                      background: s.status === 'running' ? 'var(--accent)'
-                        : s.status === 'fail' ? 'var(--bad)' : 'var(--fg-4)' }} />
-                    <span className="tp-name">{s.tool}</span>
-                    <span className="tp-cnt">{s.ms != null ? `${s.ms.toFixed(0)}ms` : '…'}</span>
-                  </div>
-                ))}
+                {lastTurn.steps.map((s) => {
+                  const tp = go ? TOOL_PAGE[s.tool] : undefined
+                  const wk = Number(s.args?.week)
+                  const jump = tp && s.status === 'done'
+                  return (
+                    <div
+                      key={s.id}
+                      className={`tool-pill ${s.status === 'running' ? 'on' : ''}`}
+                      onClick={jump && tp ? () => go!(tp, Number.isInteger(wk) && wk > 0 ? wk : undefined) : undefined}
+                      style={jump ? { cursor: 'pointer' } : undefined}
+                      title={jump ? '点击查看对应的数据页' : undefined}
+                    >
+                      <span style={{ width: 5, height: 5, borderRadius: '50%',
+                        background: s.status === 'running' ? 'var(--accent)'
+                          : s.status === 'fail' ? 'var(--bad)' : 'var(--fg-4)' }} />
+                      <span className="tp-name">{s.tool}</span>
+                      <span className="tp-cnt">{s.ms != null ? `${s.ms.toFixed(0)}ms` : '…'}</span>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>
@@ -404,7 +418,7 @@ function EmptyState({ meta, onPick }: { meta: Meta | null; onPick: (q: string) =
 }
 
 /* ---------------------------------------------------------------- 一轮对话 */
-function TurnView({ turn }: { turn: Turn }) {
+function TurnView({ turn, onOpen }: { turn: Turn; onOpen?: (p: string, arg?: string | number) => void }) {
   return (
     <div style={{ marginBottom: 26 }}>
       <div className="q-row">
@@ -412,7 +426,7 @@ function TurnView({ turn }: { turn: Turn }) {
       </div>
 
       <ErrorBoundary label="推理链">
-        <Chain steps={turn.steps} thoughts={turn.thoughts} />
+        <Chain steps={turn.steps} thoughts={turn.thoughts} onOpen={onOpen} />
       </ErrorBoundary>
 
       {turn.answer && (

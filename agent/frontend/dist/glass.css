@@ -845,6 +845,16 @@ body:has(.pg-kpi-row) .pg-stat-v {
   font-variant-numeric: tabular-nums;
   line-height: 1.15 !important;
 }
+/* 长文本大数降档：KPI 卡的大数大多是数字，34px 合适；但「损失最大的原因」
+   这类卡的值是原因名（如 破损/变质/污损），同样 34px/800 就挤成巨字还折行。
+   glass.js 的 KPI 扫描给首字符非数字的 .pg-stat-v 打 .v-txt，这里降一档，
+   与旁边数字卡视觉重量协调。选择器权重要压过已有两条 34px !important 规则。 */
+body:has(.pg-kpi-row) .app .pg .pg-stat-v.v-txt {
+  font-size: 20px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+  line-height: 1.3 !important;
+}
 body:has(.pg-kpi-row) .pg-stat-sub {
   display: inline-block;
   font-size: 11.5px !important;
@@ -1115,10 +1125,13 @@ body:has(.pg-kpi-row) .app .pg > .pg-note-line {
 }
 
 /* 关键：容器去掉 1px 缝隙底色与边框（原 .pg-kpi-row 用 gap:1px + line-soft 做
-   连通长条+分隔线），改成纯透明栅格，5 张卡各自完全独立 */
+   连通长条+分隔线），改成纯透明栅格，各卡完全独立。
+   【列数跟卡片数走】总览/归因/评价页 5 张卡，成因治理/预警方案/竞品/评估页
+   只有 4 张 —— 之前写死 repeat(5)，4 卡页第 5 列空着，整行比下面
+   的表格窄一截，看起来像没对齐。默认 4 列，5 卡页用 :has 覆盖回 5 列。 */
 body:has(.pg-kpi-row) .app .pg > .pg-kpi-row {
   grid-column: 2; grid-row: 2;
-  display: grid !important; grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
   gap: 18px !important;
   background: transparent !important;
   border: none !important;
@@ -1126,6 +1139,9 @@ body:has(.pg-kpi-row) .app .pg > .pg-kpi-row {
   overflow: visible !important;
   border-radius: 0 !important;
   padding: 0 !important;
+}
+body:has(.pg-kpi-row) .app .pg > .pg-kpi-row:has(.pg-stat:nth-child(5)) {
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
 }
 body:has(.pg-kpi-row) .app .pg > .pg-kpi-row.tight { margin-top: 0 !important; }
 body:has(.pg-kpi-row) .app .pg > .pg-kpi-row .pg-stat { min-width: 0; }
@@ -2101,6 +2117,35 @@ body .pg-kpi-row .pg-stat-v[class*=" t-"].gcu-done {
   color: #5B4A9E; background: rgba(124,111,208,.1);
   border: 1px solid rgba(124,111,208,.22);
 }
+/* ---- ⑬b2 筛选详情面板 · 可交互化 ------------------------------------------------
+   胶囊可点（hover/选中态）、组开关 off 灰化停用、排行卡行选中高亮。
+   交互逻辑全在 glass.js ⑬（panelPick/syncFilterPanel/applyPanelState）。 */
+.cc-filterpanel .ccf-tags span {
+  cursor: pointer; user-select: none;
+  transition: background .15s, color .15s, border-color .15s, opacity .2s;
+}
+.cc-filterpanel .ccf-tags span:hover { background: rgba(124,111,208,.2); }
+.cc-filterpanel .ccf-tags span.on {
+  color: #fff; font-weight: 600;
+  background: linear-gradient(135deg, #8A7BC8, #5B4A9E);
+  border-color: transparent;
+  box-shadow: 0 2px 8px -3px rgba(91,74,158,.55);
+}
+/* 开关 off：整组灰化停用（胶囊不可点；文字也压暗，让人一眼看出"这组没生效"） */
+.cc-filterpanel .cc-fp-g.fp-off .cc-fp-t,
+.cc-filterpanel .cc-fp-g.fp-off .cc-fp-act { opacity: .55; }
+.cc-filterpanel .cc-fp-g.fp-off .ccf-tags span {
+  opacity: .4; pointer-events: none; filter: grayscale(.7);
+}
+.cc-filterpanel .cc-fp-g.fp-off .cc-tg { opacity: .6; }
+/* 原因排行卡行：hover 提示可点，选中高亮（与右栏原因筛选联动） */
+.ccr-row { cursor: pointer; border-radius: 8px; padding-inline: 5px; transition: background .15s; }
+.ccr-row:hover { background: rgba(124,111,208,.09); }
+.ccr-row.on {
+  background: rgba(124,111,208,.14);
+  box-shadow: inset 0 0 0 1px rgba(124,111,208,.38);
+}
+.ccr-row.on .ccr-name { color: #4C3F86; font-weight: 700; }
 
 /* ================================================================ ⑬c 问一问 v2 · 诊断驾驶舱补样
    香芋紫底 / 细线条轻玻璃 / 发光节点 / 顶部导航+时间下拉+指标单选+AI角标 */
@@ -2776,8 +2821,12 @@ body:has(.app.app-chat)::after {
    浅紫白柔和圆角卡，固定悬浮于左侧；原顶部 .bi-scope 横条隐藏。
    选中＝浅紫填充白字；未选中＝白底细紫描边；液态胶囊滑动沿用 ⑬j */
 .glass-scope2 {
-  /* 注入为总览页网格的左栏子项：固定在文档原位，sticky 吸顶跟随滚动 */
-  grid-column: 1; grid-row: 2 / span 8;
+  /* 注入为总览页网格的左栏子项：固定在文档原位，sticky 吸顶跟随滚动。
+     【!important 必须带】总览页栅格有条通配规则
+     body:has(.pg-kpi-row) .app .pg > * { grid-column: 2 }，特异性 (0,3,1)
+     高过裸 .glass-scope2 (0,1,0) —— 不带的话面板被拖回主列，
+     变成横贯内容区的大宽卡压在图表上（2026-11-09 实测踩坑）。 */
+  grid-column: 1 !important; grid-row: 2 / span 8 !important;
   position: sticky; top: 84px;
   align-self: start;
   padding: 18px 16px 14px;

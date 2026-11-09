@@ -261,7 +261,17 @@ export function Attribution({
           sub={`业务门槛 ${d.min_effect_pp.toFixed(1)}pp`} />
         <Stat label="z 值" value={d.zscore.toFixed(2)}
           tone={Math.abs(d.zscore) >= 2 ? 'warn' : undefined}
-          sub={`统计门槛 |z| ≥ 2`} />
+          sub={`统计门槛 |z| ≥ 2`}
+          tip={
+            <div>
+              <div className="bi-tip-h">z 值 · 计算口径</div>
+              <div className="bi-tip-row">z = (本周退货率 − 基准率) / √(p(1−p)/n)</div>
+              <div className="bi-tip-row">p = 基准退货率 <b>{d.baseline.toFixed(2)}%</b>（剔除本周后其余各周合计）</div>
+              <div className="bi-tip-row">n = 本周订单 <b>{nf(d.orders)}</b> 单</div>
+              <div className="bi-tip-row">分母 = 纯随机波动的 1 个标准误 ≈ <b>{d.wobble_pp.toFixed(2)}pp</b></div>
+              <div className="bi-tip-row dim">|z| ≥ 2 ≈ 95% 置信水平，判为统计显著</div>
+            </div>
+          } />
         <Stat label="订单 / 退货" value={nf(d.orders)} unit="单"
           sub={`${nf(d.returns)} 条退货`} />
         <Stat

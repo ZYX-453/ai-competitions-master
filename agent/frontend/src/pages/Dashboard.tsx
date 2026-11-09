@@ -194,10 +194,12 @@ export function Dashboard({
       label: c.cause,
       pct: pick(c),
       text: causeMetric === 'loss' ? `¥${money(c.loss).v}${money(c.loss).u}`
-        : `${c.share.toFixed(2)}%`,
+        : causeMetric === 'n' ? `${nf(c.n)} 条`
+          : `${c.share.toFixed(2)}%`,
       text2: causeMetric === 'loss'
         ? `${c.share.toFixed(1)}% · ${nf(c.n)} 条`
-        : `¥${money(c.loss).v}${money(c.loss).u}`,
+        : causeMetric === 'n' ? `${c.share.toFixed(2)}%`
+          : `¥${money(c.loss).v}${money(c.loss).u}`,
       // 同 catBars：按数值分三档灰，不用语义色
       tone: (pick(c) / max > 0.66 ? 'hi' : pick(c) / max > 0.33 ? 'mid' : 'lo') as BarItem['tone'],
       onClick: () => onOpenCategory(scope || ''),

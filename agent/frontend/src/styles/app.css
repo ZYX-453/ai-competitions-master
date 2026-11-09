@@ -1,5 +1,5 @@
 /* ===========================================================================
-   差评溯源 · 设计系统 ｜ v4 黑白灰
+   智鉴察源 · 设计系统 ｜ v4 黑白灰
    ---------------------------------------------------------------------------
    风格定位：单色数据驾驶舱。整个界面只有一个色相（中性灰），
    层次、状态、焦点**全部靠亮度与明度差**区分，不靠颜色。
@@ -2881,6 +2881,27 @@ table.tbl {
   outline: 1.5px solid var(--bad);
   outline-offset: -1.5px;
 }
+/* 【异常周呼吸光晕】红框是静态的"判定结论"，光晕负责"活着"的感觉：
+   外圈柔光以 2s 周期呼吸，把这批格子标成页面上唯一在动的区域 ——
+   读者扫一眼就知道"这里是需要点进去解释的入口"。
+   实现要点：
+   · 画在 ::after 上 —— outline 被异常红框/焦点环占用，::before 是着色层，
+     ::after 在普通模式下空闲（HC 模式下让位给联动虚线，见 forced-colors 块）；
+   · 动画只动 opacity（box-shadow 是静态写死的），不逐帧重绘阴影，GPU 友好；
+   · hover 放大 / focus 白环走的是元素本体，和这个伪元素互不干扰。 */
+.bi-heat-c.is-anom::after {
+  content: '';
+  position: absolute;
+  inset: -2.5px;
+  border-radius: 4px;
+  pointer-events: none;
+  box-shadow: 0 0 7px 1.5px rgba(194, 102, 99, .55);
+  animation: bi-anom-glow 2s var(--ease) infinite alternate;
+}
+@keyframes bi-anom-glow {
+  from { opacity: .2; }
+  to   { opacity: 1; }
+}
 .bi-heat-c.is-trivial { outline: 1px dashed rgba(185,154,91, .55); outline-offset: -1px; }
 .bi-heat-c.is-empty { cursor: default; }
 
@@ -3822,6 +3843,9 @@ table.tbl {
        异常周 = 实线（它是要紧的事，用最实心的语言）
        联动   = 虚线（它是临时的高亮，随鼠标走，不该看起来同样权威）
      ::before 已经被着色层占用，这里用 ::after。 */
+  /* 异常呼吸光晕在 HC 下关闭：纯色彩/阴影效果，强制色板里没有意义，
+     且 ::after 必须让位给下面的联动虚线（异常+联动同格时虚线赢）。 */
+  .bi-heat-c.is-anom::after { content: none; }
   .bi-heat-c.is-link::after {
     content: '';
     position: absolute;
@@ -6001,4 +6025,266 @@ table.tbl {
    而这里位移本身不携带任何信息。 */
 @media (prefers-reduced-motion: reduce) {
   .pg-viewfade { animation: none; }
+}
+
+/* ===========================================================================
+   登录页 · 智鉴察源
+   ---------------------------------------------------------------------------
+   风格：企业级数据风控系统。海边日落海景背景（高斯模糊 + 白雾弱化），
+   极淡科技连线粒子，白色通透圆角卡片为画面第一焦点。
+   =========================================================================== */
+
+.login-page {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 海边日落海景底图（::before 里做模糊，这里只负责铺图） */
+  background: url('/bg-sea.png') center / cover no-repeat, #dce9f2;
+  overflow: hidden;
+  z-index: 9999;
+}
+
+/* 模糊弱化层：inset 负值外扩，避免 blur 边缘露出白边；
+   提亮 + 微降饱和，让背景退到"氛围"位置，不抢卡片焦点 */
+.login-page::before {
+  content: '';
+  position: absolute;
+  inset: -48px;
+  background: url('/bg-sea.png') center / cover no-repeat;
+  filter: blur(16px) brightness(1.1) saturate(.9);
+  opacity: .68;
+  z-index: 0;
+}
+
+/* 白雾蒙层：进一步降低背景对比与透明度，干净高级 */
+.login-page::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(255,255,255,.30) 0%, rgba(255,255,255,.16) 45%, rgba(255,255,255,.26) 100%);
+  z-index: 0;
+}
+
+/* ---- 科技连线粒子：极淡透明，缓慢漂移，不遮挡卡片 ---- */
+.login-particles {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.login-particles .pt-lines line {
+  stroke: rgba(255, 255, 255, .35);
+  stroke-width: 1;
+}
+
+.login-particles .pt-dots circle {
+  fill: rgba(255, 255, 255, .55);
+}
+
+/* 整层极缓慢的呼吸式漂移：有"活"的感觉，但不引人注意 */
+.login-particles {
+  animation: login-drift 26s ease-in-out infinite alternate;
+}
+
+@keyframes login-drift {
+  from { transform: translate3d(0, 0, 0) scale(1); }
+  to   { transform: translate3d(-14px, -10px, 0) scale(1.03); }
+}
+
+/* ---- 登录卡片：轻微通透 + 柔和高级阴影，画面第一焦点 ---- */
+.login-card {
+  position: relative;
+  z-index: 1;
+  width: 360px;
+  max-width: 90vw;
+  padding: 40px 36px 32px;
+  background: rgba(255, 255, 255, .88);
+  backdrop-filter: blur(14px) saturate(1.04);
+  -webkit-backdrop-filter: blur(14px) saturate(1.04);
+  border: 1px solid rgba(255, 255, 255, .65);
+  border-radius: 20px;
+  box-shadow:
+    0 24px 64px rgba(96, 125, 160, .18),
+    0 8px 22px rgba(96, 125, 160, .10),
+    inset 0 1px 0 rgba(255, 255, 255, .85);
+  text-align: center;
+}
+
+.login-brand { margin-bottom: 28px; }
+
+.login-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #c2185b;
+  letter-spacing: 2px;
+  margin: 0 0 8px;
+}
+
+.login-subtitle {
+  font-size: 13px;
+  color: #9e9e9e;
+  margin: 0;
+  letter-spacing: 1px;
+}
+
+/* ---- 表单：浮动标签 + 圆角输入框 ---- */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-field {
+  position: relative;
+  text-align: left;
+}
+
+.login-field input {
+  width: 100%;
+  height: 46px;
+  padding: 14px 14px 0;
+  border: 1px solid #e0e0e0;
+  border-radius: 10px;
+  background: #fafafa;
+  font-size: 14px;
+  color: #333;
+  outline: none;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+  box-sizing: border-box;
+}
+
+.login-field input:focus {
+  border-color: #f48fb1;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(244, 143, 177, .15);
+}
+
+.login-field label {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: #bdbdbd;
+  pointer-events: none;
+  transition: all .2s ease;
+  background: transparent;
+  padding: 0 2px;
+}
+
+/* 浮动标签：有值或聚焦时上浮 */
+.login-field input:focus + label,
+.login-field input:not(:placeholder-shown) + label {
+  top: 0;
+  transform: translateY(-50%) scale(.82);
+  color: #ec407a;
+  background: rgba(255,255,255,.96);
+}
+
+.login-error {
+  font-size: 12px;
+  color: #e53935;
+  text-align: left;
+  margin-top: -6px;
+}
+
+/* ---- 登录按钮：粉色渐变，圆角 ---- */
+.login-btn {
+  width: 100%;
+  height: 44px;
+  margin-top: 4px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #f48fb1, #ec407a);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  cursor: pointer;
+  transition: transform .15s ease, box-shadow .15s ease, filter .15s ease;
+}
+
+.login-btn:hover {
+  filter: brightness(1.06);
+  box-shadow: 0 4px 14px rgba(236, 64, 122, .28);
+}
+
+.login-btn:active {
+  transform: translateY(1px);
+}
+
+.login-btn:disabled {
+  opacity: .7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ---- 底部链接 ---- */
+.login-foot {
+  margin-top: 22px;
+  font-size: 12px;
+  color: #bdbdbd;
+}
+
+.login-foot a {
+  color: #9e9e9e;
+  text-decoration: none;
+  transition: color .2s ease;
+}
+
+.login-foot a:hover {
+  color: #ec407a;
+}
+
+.login-sep {
+  margin: 0 8px;
+  color: #e0e0e0;
+}
+
+/* 窄屏适配 */
+@media (max-width: 420px) {
+  .login-card {
+    padding: 32px 24px 26px;
+    border-radius: 16px;
+  }
+  .login-title { font-size: 22px; }
+}
+
+/* ===========================================================================
+   推理链 · 点击步骤直达数据页
+   - 可跳步骤（.can-jump）hover 高亮 + 右侧「查数据 ›」提示
+   - 右栏执行轨迹（.tool-pill）可点击时同样给 hover 反馈
+   =========================================================================== */
+
+.step.can-jump .step-main {
+  transition: background .15s ease;
+}
+
+.step.can-jump .step-main:hover {
+  background: rgba(124, 111, 208, .07);
+}
+
+.step-jump {
+  font-size: 11px;
+  color: var(--accent, #7c6fd0);
+  white-space: nowrap;
+  opacity: .55;
+  transition: opacity .15s ease;
+}
+
+.step.can-jump .step-main:hover .step-jump {
+  opacity: 1;
+}
+
+.tool-pill[title] {
+  transition: background .15s ease;
+}
+
+.tool-pill[title]:hover {
+  background: rgba(124, 111, 208, .09);
 }
