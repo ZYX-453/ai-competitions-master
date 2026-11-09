@@ -79,7 +79,8 @@ def main():
         # 越界/无关问题本来就是固定答复，不走模型；把"没走 LLM"判成失败是错的。
         # 【v2.5】"超出能力"也是固定答复，一起放过。
         allow_tpl = badge in ('超出范围', '超出能力')
-        problems, notes = cc.check(ans, facts, allow_template=allow_tpl)
+        problems, notes = cc.check(ans, facts, allow_template=allow_tpl,
+                                   chain=cc.chain_summaries(ev))
         # 徽章不匹配也是硬性失败：徽章是后端判定结论，写错了等于结论错了。
         if badge != want_badge:
             problems = problems + [f'徽章 {badge} ≠ 期望 {want_badge}']

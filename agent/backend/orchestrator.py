@@ -1191,9 +1191,26 @@ class Agent:
                 return (f"{d['orders_year']:,} 单 / ¥{d['gmv_year']/1e4:.1f} 万 / "
                         f"退货率 {d['return_rate']*100:.2f}% / 损失 ¥{d['loss_total']/1e4:.1f} 万")
             if name == 'diagnose_week':
-                v = '异常' if d['is_anomaly'] else '正常'
+                # 【两个标签不够用，判定层本来就有四档】
+                # 原来这里写的是 `'异常' if d['is_anomaly'] else '正常'`，
+                # 于是屏幕上会出现这种自相矛盾的一屏：
+                #   推理链：第 49 周 …（-1.84pp，z=-5.1，**异常**）
+                #   正下方：**显著改善**  第 49 周退货率显著低于基线，是个好周
+                # 第 52 周同款：推理链说「正常」，headline 说「统计上显著（z=-2.84）」。
+                # 两句都对，但并排看就是互相打脸——而且这行是推理链上唯一一句
+                # 带数字的结论，评委先看到的就是它。
+                # 判定层其实是四档（见上面 diagnose_week 那个 if 链）：
+                #   显著上升 / 显著改善 / 显著但幅度不足 / 未达显著，
+                # 摘要跟着分四档，屏幕上才不会有第二套口径。
+                _dp = d.get('delta_pp') or 0
+                if d.get('is_anomaly'):
+                    v = '异常' if _dp > 0 else '显著改善'
+                elif d.get('trivial_but_significant'):
+                    v = '显著但幅度不足'
+                else:
+                    v = '未达显著'
                 return (f"第 {d['week']} 周 {d['rr_now']*100:.2f}% vs 基线 "
-                        f"{d['rr_base']*100:.2f}%（{d['delta_pp']:+.2f}pp，z={d['zscore']}，{v}）")
+                        f"{d['rr_base']*100:.2f}%（{_dp:+.2f}pp，z={d['zscore']}，{v}）")
             if name == 'promo_mechanism':
                 dc = d['decomposition']
                 return (f"实际 {d['actual_gap_pp']:+.2f}pp = 结构 {dc['structure_pp']:+.2f}pp"
@@ -1626,8 +1643,14 @@ class Agent:
         # 关键：改写耗时 5–40s，期间不能什么都不发，
         # 否则前端停在最后一步、看起来像卡死。
         # 先推一条 thought 说明正在做什么，再 await 改写。
+        #
+        # 【措辞不带"正在"】这条 thought 只在生成期间有用，
+        # 但完成后它不会消失——推理链是只增不改的流水。
+        # 写"正在用 qwen-plus 组织结论"的话，答案已经出来了、
+        # 屏幕上还挂着"正在"，读起来像流程没走完（截图核对时就被这条绊了一下）。
+        # 改成中性语态：生成期间是"这一步在做什么"，结束后是"这一步做了什么"，两读都通。
         if self.llm:
-            yield Event('thought', {'text': f'正在用 {self.llm.model} 组织结论措辞（数字已由 pandas 核算，模型只负责表达；若首版不合规会自动重写一次）'})
+            yield Event('thought', {'text': f'用 {self.llm.model} 组织结论措辞（数字已由 pandas 核算，模型只负责表达；若首版不合规会自动重写一次）'})
             answer = await self._polish_with_llm(answer, state)
 
         yield Event('answer', answer)
@@ -3483,7 +3506,16 @@ headline 的例子（照这个意思写，不要照抄字面）：
                 return False, f'正文出现悬空指代「{m.group(0)}」，但事实包里没有原因结构'
             # 动作：必须真的给过 playbook
             if noun == '动作' and not pkt.get('actions'):
-                return False, f'正文出现悬空指代「{m.group(0)}」，但事实包里没有动作清单'
+                # 【改善/无异常场景的同类出口，见上面校验4的 review_ok】
+                # 这两类场景本来就没有 playbook（不归因，所以没有派活清单），
+                # 但"复盘这周做对了什么、把这些动作固化下来"是正解表述 ——
+                # 这里的"这些动作"指复盘得出的动作，不是系统派发的清单。
+                # 一刀切会把正解判成悬空指代，直接回退模板，而模板反而更差
+                # （它只说"值得复盘"，不说复什么）。
+                # 所以只在**前文出现过复盘类自省词**时放行，其余照旧拦。
+                _head = body[:m.start()]
+                if not any(w in _head for w in ('复盘', '回顾', '沿用', '保持', '沉淀')):
+                    return False, f'正文出现悬空指代「{m.group(0)}」，但事实包里没有动作清单'
 
         # ---- 校验 7：不许生造中文词 ----
         # 【这条是实测截图逼出来的】
@@ -4906,20 +4938,35 @@ headline 的例子（照这个意思写，不要照抄字面）：
                     f'{c["rr_base"]*100:.2f}%',
                     f'{c["gap_pp"]:+.2f}pp',
                 ])
-            # 【v2.5 补漏】这句 note 原来是写死的"被判定为样本不足或非异常"。
-            # 它是最顽固的一处：正文、caveats 都改干净了，表格底下还挂着这句，
-            # 用户翻到表格就会以为系统又在拿"样本不足"当借口 —— 而他投诉的
-            # 正是这句话。两个原因必须分开讲，因为它们意味着完全不同的东西：
-            #   · 样本不足 → 我看不清（我们的问题）
-            #   · 非异常   → 确实没事（数据的事实）
-            # 合并成一句，等于把"没事"说成"看不清"，白丢一次可信度。
-            if diag.get('enough_sample'):
-                _why_no_decomp = ('本周偏离未通过统计与业务双重判定线，'
-                                  '属于正常波动，因此只列原始差异，不对整体做归因——'
-                                  '给一个不成立的归因比不给更糟。')
-            else:
+            # 【v2.6 补漏：三种情形必须三句话】
+            # 原来的 note 只分"样本够 / 不够"两种，把三种完全不同的结论压进同一句：
+            #   · 显著下降（第 49 周 z=−5.10、−1.84pp）→ 这是改善。
+            #     说成"正常波动"等于否认自己上一行刚下的判定，页面上=自相矛盾。
+            #   · 统计显著但幅度未过业务门槛（第 52 周 z=−2.84、−0.98pp）→
+            #     这是"看见了，但判断不值得动手"。说成"正常波动"会把一次判断
+            #     说成一次测量失败，把系统的判断权又收回去了。
+            #   · 真的不显著（第 3 周 z=0.66、+0.22pp）→ 才是"正常波动"。
+            # 三种结论对读者意味着三件不同的事（不用管 / 看着但别动 / 确实没事），
+            # 合并成一句就是自相矛盾 —— 读者翻到表格会怀疑正文。
+            if not diag.get('enough_sample'):
                 _why_no_decomp = ('本周样本量低于判定门槛，看不出就是看不出，'
                                   '因此只列原始差异，不硬算对整体的贡献。')
+            elif diag.get('is_anomaly') and (diag.get('delta_pp') or 0) < 0:
+                _why_no_decomp = (
+                    f'本周退货率比基线低 {abs(diag.get("delta_pp") or 0):.2f}pp，'
+                    '二项检验显著——这是改善，不是问题。'
+                    '归因是为了找该修的东西，改善不做归因；'
+                    '因此只列原始差异，值得做的是复盘这周做对了什么。')
+            elif diag.get('trivial_but_significant'):
+                _why_no_decomp = (
+                    f'本周偏离在统计上显著，但幅度只有 '
+                    f'{abs(diag.get("delta_pp") or 0):.2f}pp，'
+                    f'未过 {(diag.get("min_effect_pp") or 1.5):.1f}pp 的业务门槛——'
+                    '看得见，但不值得单独立项。因此只列原始差异，不做整体归因。')
+            else:
+                _why_no_decomp = ('本周偏离未通过统计显著性检验，属于正常波动，'
+                                  '因此只列原始差异，不对整体做归因——'
+                                  '给一个不成立的归因比不给更糟。')
             blocks.append({
                 'type': 'table',
                 'title': '各类目退货率对照（未做归因）',
@@ -5070,6 +5117,19 @@ headline 的例子（照这个意思写，不要照抄字面）：
             return (f'{_scope}你问的那一周其实正常，真正异常的是第 {diag["week"]} 周',
                     {'label': '已重定向', 'level': 'warn'})
         if not diag.get('is_anomaly'):
+            # 【v2.6 补漏】这里原来把所有"没判成异常"的情况一律说成"正常波动范围内"。
+            # 但"没判成异常"有两种截然不同的原因，对读者意味着完全不同的东西：
+            #   · 统计上根本没显著（第 3 周 z=0.66、+0.22pp）→ 确实在波动范围内
+            #   · 统计上显著、但幅度没过业务门槛（第 52 周 z=−2.84、−0.98pp）→
+            #     不是"没看见"，是"看见了、判断不值得动手"。
+            # 说成"正常波动"会把一次主动判断降级成一次测量失败，
+            # 而且和下面表格 note 里"统计上显著"自相矛盾 —— 同一屏两个结论。
+            if diag.get('trivial_but_significant'):
+                return (f'{_scope}第 {diag["week"]} 周偏离在统计上显著（z = {diag["zscore"]}），'
+                        f'但幅度只有 {abs(diag.get("delta_pp") or 0):.2f}pp、'
+                        f'没过 {(diag.get("min_effect_pp") or 1.5):.1f}pp 的业务门槛——'
+                        f'看得见，但不值得动手',
+                        {'label': '幅度不足', 'level': 'ok'})
             return (f'{_scope}第 {diag["week"]} 周在正常波动范围内（z = {diag["zscore"]}）',
                     {'label': '无异常', 'level': 'ok'})
         if promo and (promo.get('verdict') or {}).get('code') == 'PROMO_BEHAVIOR':

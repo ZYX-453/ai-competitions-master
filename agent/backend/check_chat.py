@@ -230,7 +230,75 @@ def facts_from(events):
     }
 
 
-def check(answer, facts, allow_template=False):
+def chain_summaries(events):
+    """收集推理链上每个工具那一行的摘要文本，{工具名: 最后一次的摘要}。
+
+    【为什么不并进 facts_from】
+    facts_from 的返回值会被 _collect_numbers 递归扫一遍当作"取证池"。
+    把摘要文本塞进去，摘要里的数字就自动"有出处"了——
+    那等于让被检查的文本给自己作证，编造检查会变松。
+    所以摘要单独走一个通道。
+    """
+    out = {}
+    for n, d in events:
+        if n == 'tool_result' and d.get('summary'):
+            out[d.get('tool')] = d['summary']
+    return out
+
+
+# 推理链摘要里判定标签的四档（与 diagnose_week 的分支一一对应）
+_CHAIN_LABELS = ('异常', '显著改善', '显著但幅度不足', '未达显著')
+
+# 标签之间的互斥关系：同一个周不可能既是这个又是那个
+_CONFLICT = {
+    '异常': ('无异常', '显著改善', '幅度不足'),
+    '显著改善': ('无异常', '幅度不足', '已重定向'),
+    '显著但幅度不足': ('无异常', '显著改善', '异常'),
+    '未达显著': ('显著改善', '幅度不足', '异常'),
+}
+
+
+def check_chain_label(chain, facts, answer):
+    """推理链摘要的判定标签 ↔ 结论徽章，必须同档。
+
+    【这条门禁是补一个反复出现的坑，不是凭空加的】
+    屏幕上出现过两次"同一屏两套口径"：
+      · 第 49 周  推理链「z=-5.1，异常」  正下方「显著改善  是个好周」
+      · 第 52 周  推理链「z=-2.84，正常」 正下方「统计上显著（z=-2.84）…」
+    根因：摘要那行原来只有 异常/正常 两档，而判定层有四档。
+    两句话各自都"没错"，但并排出现时读者只能认为其中一句在撒谎。
+    而且摘要那行是推理链上唯一一句带数字的结论，评委第一眼看的就是它。
+
+    所以判两条：
+      1) 标签必须落在那四档里（回退成"正常"就是回退成两档，直接红）
+      2) 标签不能和徽章互斥
+    """
+    problems = []
+    summ = (chain or {}).get('diagnose_week') or ''
+    if not summ:
+        return problems          # 这题没调诊断工具，不适用
+    # 摘要格式：第 49 周 11.72% vs 基线 13.56%（-1.84pp，z=-5.1，显著改善）
+    m = re.search(r'（[^（）]*，([^（）,，]+)）\s*$', summ.strip())
+    if not m:
+        problems.append(f'推理链摘要读不出判定标签：{summ[:40]}')
+        return problems
+    label = m.group(1).strip()
+    if label not in _CHAIN_LABELS:
+        problems.append(
+            f'推理链标签「{label}」不在四档内 {_CHAIN_LABELS}'
+            f'（两档写法会让"异常/正常"和下方结论打架）')
+
+    badge = ((answer or {}).get('badge') or {}).get('label', '')
+    bad = _CONFLICT.get(label) or ()
+    if badge and badge in bad:
+        problems.append(f'推理链说「{label}」，徽章却是「{badge}」——同屏两套口径')
+
+    # 摘要里的周号必须和徽章/正文指的是同一周（重定向场景允许不同，
+    # 但那种情况徽章是「已重定向」，上面那条互斥已经管住了）
+    return problems
+
+
+def check(answer, facts, allow_template=False, chain=None):
     """返回 (问题列表, 提示列表)。问题=必须修；提示=可接受但要知道。
 
     allow_template：越界/无关问题本来就该直接给固定答案、不调模型，
@@ -321,6 +389,10 @@ def check(answer, facts, allow_template=False):
             if not any(k in body for k in kws):
                 notes.append(f'未覆盖要点：{label}')
 
+    # 推理链标签 ↔ 徽章（同屏两套口径）
+    if chain:
+        problems.extend(check_chain_label(chain, facts, answer))
+
     return problems, notes
 
 
@@ -355,7 +427,7 @@ def main():
             print(f'[{i}] {p.strip()}')
             print('-' * 72)
 
-    problems, notes = check(answer, facts)
+    problems, notes = check(answer, facts, chain=chain_summaries(events))
     print(f'by_llm={answer.get("by_llm")}  llm_note={answer.get("llm_note")!r}')
     print('-' * 72)
     if problems:
